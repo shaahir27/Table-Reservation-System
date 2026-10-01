@@ -1,0 +1,17 @@
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+config.properties
+.env
+.env.*
+!.env.example
+logs/
+*.log
+dependency-reduced-pom.xml
+.DS_Store
+Thumbs.db

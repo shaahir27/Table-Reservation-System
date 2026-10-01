@@ -1,0 +1,5 @@
+# Database connection configuration
+db.url=jdbc:oracle:thin:@//localhost:1521/XEPDB1
+# 11g XE alternative: jdbc:oracle:thin:@localhost:1521:XE
+db.username=rrs_user
+db.password=change_me
