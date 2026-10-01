@@ -117,6 +117,10 @@ public class Sidebar extends JPanel {
         }
     }
 
+    public String getCurrentScreen() {
+        return currentScreen;
+    }
+
     private void navigateTo(String screenKey) {
         setSelectedScreen(screenKey);
         if (onNavigate != null) {

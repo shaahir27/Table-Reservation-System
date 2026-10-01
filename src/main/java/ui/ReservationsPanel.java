@@ -1,6 +1,5 @@
 package ui;
 
-import exception.ValidationException;
 import model.ReservationDetail;
 import model.ReservationFilter;
 import model.ReservationStatus;
@@ -13,8 +12,6 @@ import ui.components.Toast;
 import util.Ui;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;

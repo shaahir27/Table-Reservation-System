@@ -1,7 +1,6 @@
 package ui;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import exception.AppException;
 import exception.ReferenceInUseException;
 import exception.ValidationException;
 import model.Customer;

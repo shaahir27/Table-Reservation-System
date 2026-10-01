@@ -1,10 +1,7 @@
 package ui;
 
-import com.formdev.flatlaf.FlatClientProperties;
 import exception.BookingConflictException;
-import exception.ValidationException;
 import model.Customer;
-import model.Reservation;
 import model.RestaurantTable;
 import model.TableAvailability;
 import model.TimeSlot;

@@ -1,7 +1,6 @@
 package dao;
 
 import db.DatabaseConnection;
-import exception.ValidationException;
 import model.Reservation;
 import model.ReservationDetail;
 import model.ReservationStatus;
