@@ -82,8 +82,11 @@ public class AddCustomerDialog extends JDialog {
 
         // Name
         content.add(createFieldLabel("Full Name *"));
+        content.add(Box.createVerticalStrut(4));
         nameField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. Priya Patel");
+        nameField.setPreferredSize(new Dimension(320, 38));
         nameField.setMaximumSize(new Dimension(320, 38));
+        nameField.setAlignmentX(0.0f);
         content.add(nameField);
         styleErrorLabel(nameErrorLabel);
         content.add(nameErrorLabel);
@@ -91,8 +94,11 @@ public class AddCustomerDialog extends JDialog {
 
         // Phone
         content.add(createFieldLabel("Phone Number * (10 Digits)"));
+        content.add(Box.createVerticalStrut(4));
         phoneField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. 9812345678");
+        phoneField.setPreferredSize(new Dimension(320, 38));
         phoneField.setMaximumSize(new Dimension(320, 38));
+        phoneField.setAlignmentX(0.0f);
         content.add(phoneField);
         styleErrorLabel(phoneErrorLabel);
         content.add(phoneErrorLabel);
@@ -100,8 +106,11 @@ public class AddCustomerDialog extends JDialog {
 
         // Email
         content.add(createFieldLabel("Email Address (Optional)"));
+        content.add(Box.createVerticalStrut(4));
         emailField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. priya@example.com");
+        emailField.setPreferredSize(new Dimension(320, 38));
         emailField.setMaximumSize(new Dimension(320, 38));
+        emailField.setAlignmentX(0.0f);
         content.add(emailField);
         styleErrorLabel(emailErrorLabel);
         content.add(emailErrorLabel);

@@ -147,6 +147,8 @@ public class DashboardPanel extends BasePanel {
 
         actionHeader.add(overviewTitle, BorderLayout.WEST);
         actionHeader.add(headerButtons, BorderLayout.EAST);
+        actionHeader.setPreferredSize(new Dimension(100, 42));
+        actionHeader.setMinimumSize(new Dimension(100, 42));
         mainContent.add(actionHeader);
         mainContent.add(Box.createVerticalStrut(Theme.SPACE_16));
 

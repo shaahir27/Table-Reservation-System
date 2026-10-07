@@ -12,7 +12,6 @@ import util.ValidationUtil;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,8 +32,7 @@ class ReservationServiceTest {
         List<RestaurantTable> candidates = List.of(
                 new RestaurantTable(1, "T01", 2, "Indoor", TableStatus.AVAILABLE),
                 new RestaurantTable(2, "T02", 8, "Hall", TableStatus.AVAILABLE),
-                new RestaurantTable(3, "T03", 4, "Window", TableStatus.AVAILABLE)
-        );
+                new RestaurantTable(3, "T03", 4, "Window", TableStatus.AVAILABLE));
 
         // For 3 guests, T03 (4 seats) is the best fit over T02 (8 seats)
         TableAvailability rec = reservationService.recommendTable(candidates, 3);
@@ -50,8 +48,7 @@ class ReservationServiceTest {
         List<RestaurantTable> candidates = List.of(
                 new RestaurantTable(1, "T03", 4, "Window", TableStatus.AVAILABLE),
                 new RestaurantTable(2, "T02", 4, "Indoor", TableStatus.AVAILABLE),
-                new RestaurantTable(3, "T07", 4, "Outdoor", TableStatus.AVAILABLE)
-        );
+                new RestaurantTable(3, "T07", 4, "Outdoor", TableStatus.AVAILABLE));
 
         // All have capacity 4. T02 is alphabetically/numerically lowest
         TableAvailability rec = reservationService.recommendTable(candidates, 4);
@@ -65,8 +62,7 @@ class ReservationServiceTest {
         List<RestaurantTable> candidates = List.of(
                 new RestaurantTable(1, "T01", 2, "Indoor", TableStatus.AVAILABLE),
                 new RestaurantTable(2, "T02", 4, "Indoor", TableStatus.AVAILABLE),
-                new RestaurantTable(3, "T03", 6, "Outdoor", TableStatus.AVAILABLE)
-        );
+                new RestaurantTable(3, "T03", 6, "Outdoor", TableStatus.AVAILABLE));
 
         // 8 guests cannot fit in any single table
         TableAvailability rec = reservationService.recommendTable(candidates, 8);
@@ -78,8 +74,7 @@ class ReservationServiceTest {
     void testRecommendTable_IgnoresUnavailable() {
         List<RestaurantTable> candidates = List.of(
                 new RestaurantTable(1, "T01", 4, "Indoor", TableStatus.MAINTENANCE),
-                new RestaurantTable(2, "T02", 6, "Hall", TableStatus.AVAILABLE)
-        );
+                new RestaurantTable(2, "T02", 6, "Hall", TableStatus.AVAILABLE));
 
         TableAvailability rec = reservationService.recommendTable(candidates, 4);
         assertNotNull(rec);
@@ -105,8 +100,8 @@ class ReservationServiceTest {
         TimeSlot slot = new TimeSlot(1, "12:00 PM", LocalTime.of(12, 0), LocalTime.of(13, 30));
         LocalDate pastDate = LocalDate.now().minusDays(1);
 
-        ValidationException ex = assertThrows(ValidationException.class, () ->
-                ValidationUtil.validateReservation(1, pastDate, slot, 2, table));
+        ValidationException ex = assertThrows(ValidationException.class,
+                () -> ValidationUtil.validateReservation(1, pastDate, slot, 2, table));
         assertTrue(ex.getFieldErrors().containsKey("date"));
     }
 
@@ -117,8 +112,8 @@ class ReservationServiceTest {
         TimeSlot slot = new TimeSlot(4, "07:30 PM", LocalTime.of(19, 30), LocalTime.of(21, 0));
         LocalDate futureDate = LocalDate.now().plusDays(1);
 
-        ValidationException ex = assertThrows(ValidationException.class, () ->
-                ValidationUtil.validateReservation(1, futureDate, slot, 4, table));
+        ValidationException ex = assertThrows(ValidationException.class,
+                () -> ValidationUtil.validateReservation(1, futureDate, slot, 4, table));
         assertTrue(ex.getFieldErrors().containsKey("table"));
     }
 
@@ -129,8 +124,8 @@ class ReservationServiceTest {
         TimeSlot slot = new TimeSlot(4, "07:30 PM", LocalTime.of(19, 30), LocalTime.of(21, 0));
         LocalDate futureDate = LocalDate.now().plusDays(1);
 
-        ValidationException ex = assertThrows(ValidationException.class, () ->
-                ValidationUtil.validateReservation(1, futureDate, slot, 2, table));
+        ValidationException ex = assertThrows(ValidationException.class,
+                () -> ValidationUtil.validateReservation(1, futureDate, slot, 2, table));
         assertTrue(ex.getFieldErrors().containsKey("table"));
     }
 
@@ -142,8 +137,8 @@ class ReservationServiceTest {
         TimeSlot pastSlot = new TimeSlot(99, "Past Slot", LocalTime.of(0, 1), LocalTime.of(1, 0));
         LocalDate today = LocalDate.now();
 
-        ValidationException ex = assertThrows(ValidationException.class, () ->
-                ValidationUtil.validateReservation(1, today, pastSlot, 2, table));
+        ValidationException ex = assertThrows(ValidationException.class,
+                () -> ValidationUtil.validateReservation(1, today, pastSlot, 2, table));
         assertTrue(ex.getFieldErrors().containsKey("slot"));
     }
 }

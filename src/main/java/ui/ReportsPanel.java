@@ -7,6 +7,8 @@ import ui.components.Toast;
 import util.Ui;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -59,6 +61,7 @@ public class ReportsPanel extends BasePanel {
     private final JSpinner fromDateSpinner = new JSpinner(new SpinnerDateModel());
     private final JLabel toLabel = new JLabel("To:");
     private final JSpinner toDateSpinner = new JSpinner(new SpinnerDateModel());
+    private final JPanel dateRangeRow = new JPanel();
     private final JButton runReportBtn;
 
     // Table & Chart
@@ -126,10 +129,7 @@ public class ReportsPanel extends BasePanel {
 
     private void updateDateControlsVisibility() {
         boolean isDateRange = REPORT_DATE_RANGE.equals(reportCombo.getSelectedItem());
-        fromLabel.setVisible(isDateRange);
-        fromDateSpinner.setVisible(isDateRange);
-        toLabel.setVisible(isDateRange);
-        toDateSpinner.setVisible(isDateRange);
+        dateRangeRow.setVisible(isDateRange);
         revalidate();
         repaint();
     }
@@ -138,27 +138,48 @@ public class ReportsPanel extends BasePanel {
         JPanel mainContent = new JPanel(new BorderLayout(0, Theme.SPACE_16));
         mainContent.setOpaque(false);
 
-        // Filter Bar Card
+        // Filter Bar Card (Spacious 2-Row Layout)
         JPanel filterCard = createCardPanel();
-        filterCard.setLayout(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, Theme.SPACE_8));
+        filterCard.setLayout(new BoxLayout(filterCard, BoxLayout.Y_AXIS));
+
+        // Row 1: Report selector + Run button
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, 0));
+        row1.setOpaque(false);
+        row1.setAlignmentX(0.0f);
 
         JLabel selectLabel = new JLabel("Report:");
         selectLabel.setFont(Theme.FONT_BODY_BOLD);
         selectLabel.setForeground(Theme.TEXT_PRIMARY);
 
-        reportCombo.setPreferredSize(new Dimension(260, 36));
+        reportCombo.setPreferredSize(new Dimension(300, 36));
         reportCombo.setFont(Theme.FONT_BODY);
 
-        fromLabel.setFont(Theme.FONT_BODY_BOLD);
-        toLabel.setFont(Theme.FONT_BODY_BOLD);
+        row1.add(selectLabel);
+        row1.add(reportCombo);
+        row1.add(runReportBtn);
 
-        filterCard.add(selectLabel);
-        filterCard.add(reportCombo);
-        filterCard.add(fromLabel);
-        filterCard.add(fromDateSpinner);
-        filterCard.add(toLabel);
-        filterCard.add(toDateSpinner);
-        filterCard.add(runReportBtn);
+        // Row 2: Date range controls (visible only for custom date range reports)
+        dateRangeRow.setLayout(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, 0));
+        dateRangeRow.setOpaque(false);
+        dateRangeRow.setAlignmentX(0.0f);
+        dateRangeRow.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_12, 0, 0, 0));
+
+        fromLabel.setFont(Theme.FONT_BODY_BOLD);
+        fromLabel.setForeground(Theme.TEXT_PRIMARY);
+        toLabel.setFont(Theme.FONT_BODY_BOLD);
+        toLabel.setForeground(Theme.TEXT_PRIMARY);
+
+        fromDateSpinner.setPreferredSize(new Dimension(125, 36));
+        toDateSpinner.setPreferredSize(new Dimension(125, 36));
+
+        dateRangeRow.add(fromLabel);
+        dateRangeRow.add(fromDateSpinner);
+        dateRangeRow.add(Box.createHorizontalStrut(Theme.SPACE_8));
+        dateRangeRow.add(toLabel);
+        dateRangeRow.add(toDateSpinner);
+
+        filterCard.add(row1);
+        filterCard.add(dateRangeRow);
 
         mainContent.add(filterCard, BorderLayout.NORTH);
 

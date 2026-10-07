@@ -6,7 +6,6 @@ import util.OracleErrorMapper;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -16,12 +15,10 @@ import java.util.Properties;
 /**
  * Manages database connectivity to Oracle.
  * Produces independent connections per request for safe transaction boundaries.
+ * All connection details (URL, username, password) are loaded from .env.
  */
 public class DatabaseConnection {
     private static final Properties properties = new Properties();
-    private static final String DEFAULT_URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";
-    private static final String DEFAULT_USER = "rrs_user";
-    private static final String DEFAULT_PASSWORD = "change_me";
 
     static {
         DriverManager.setLoginTimeout(5);
@@ -29,82 +26,73 @@ public class DatabaseConnection {
     }
 
     private static void loadConfiguration() {
-        // 1. Check for .env file in the working directory
+        // 1. Load from .env if present
         File envFile = new File(".env");
         if (envFile.exists()) {
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(envFile))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim();
-                    if (line.isEmpty() || line.startsWith("#")) continue;
-                    int eqIndex = line.indexOf('=');
-                    if (eqIndex > 0) {
-                        String key = line.substring(0, eqIndex).trim();
-                        String val = line.substring(eqIndex + 1).trim();
-                        if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
-                            val = val.substring(1, val.length() - 1);
-                        }
-                        if ("DB_URL".equalsIgnoreCase(key) || "db.url".equalsIgnoreCase(key)) {
-                            properties.setProperty("db.url", val);
-                        } else if ("DB_USERNAME".equalsIgnoreCase(key) || "DB_USER".equalsIgnoreCase(key) || "db.username".equalsIgnoreCase(key)) {
-                            properties.setProperty("db.username", val);
-                        } else if ("DB_PASSWORD".equalsIgnoreCase(key) || "DB_PASS".equalsIgnoreCase(key) || "db.password".equalsIgnoreCase(key)) {
-                            properties.setProperty("db.password", val);
-                        }
+            try (InputStream in = new FileInputStream(envFile)) {
+                Properties envProps = new Properties();
+                envProps.load(in);
+                for (String key : envProps.stringPropertyNames()) {
+                    String val = envProps.getProperty(key).trim();
+                    if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
+                        val = val.substring(1, val.length() - 1);
                     }
+                    properties.setProperty(key.toUpperCase(), val);
                 }
-                AppLog.info("Loaded database configuration from .env file");
-            } catch (IOException e) {
+                AppLog.info("Loaded database configuration from .env");
+            } catch (Exception e) {
                 AppLog.warning("Could not read .env file: " + e.getMessage());
             }
         }
 
-        // 2. Check for config.properties in working directory
+        // 2. Fallback to config.properties if present
         File configFile = new File("config.properties");
         if (configFile.exists()) {
             try (InputStream in = new FileInputStream(configFile)) {
-                Properties prop = new Properties();
-                prop.load(in);
-                for (String name : prop.stringPropertyNames()) {
-                    if (!properties.containsKey(name)) {
-                        properties.setProperty(name, prop.getProperty(name));
-                    }
+                Properties configProps = new Properties();
+                configProps.load(in);
+                for (String key : configProps.stringPropertyNames()) {
+                    properties.putIfAbsent(key.toUpperCase(), configProps.getProperty(key).trim());
                 }
-                AppLog.info("Loaded configuration from working directory: " + configFile.getAbsolutePath());
-            } catch (IOException e) {
-                AppLog.warning("Could not read config.properties from working directory: " + e.getMessage());
+                AppLog.info("Loaded database configuration from config.properties");
+            } catch (Exception e) {
+                AppLog.warning("Could not read config.properties: " + e.getMessage());
             }
         }
+    }
 
-        // 3. Fallback to classpath config.properties
-        try (InputStream in = DatabaseConnection.class.getClassLoader().getResourceAsStream("config.properties")) {
-            if (in != null) {
-                Properties prop = new Properties();
-                prop.load(in);
-                for (String name : prop.stringPropertyNames()) {
-                    if (!properties.containsKey(name)) {
-                        properties.setProperty(name, prop.getProperty(name));
-                    }
-                }
-                AppLog.info("Loaded configuration from classpath resource config.properties");
+    private static String getSetting(String... keys) {
+        for (String key : keys) {
+            String val = properties.getProperty(key.toUpperCase());
+            if (val != null && !val.trim().isEmpty()) {
+                return val.trim();
             }
-        } catch (IOException e) {
-            AppLog.warning("Could not read config.properties from classpath: " + e.getMessage());
+            val = System.getenv(key);
+            if (val != null && !val.trim().isEmpty()) {
+                return val.trim();
+            }
         }
-
-        // 4. Default fallbacks if still unconfigured
-        if (!properties.containsKey("db.url")) properties.setProperty("db.url", DEFAULT_URL);
-        if (!properties.containsKey("db.username")) properties.setProperty("db.username", DEFAULT_USER);
-        if (!properties.containsKey("db.password")) properties.setProperty("db.password", DEFAULT_PASSWORD);
+        return null;
     }
 
     /**
      * Obtains a new JDBC connection. Callers must close it (e.g. via try-with-resources).
      */
     public static Connection getConnection() {
-        String url = properties.getProperty("db.url", DEFAULT_URL);
-        String user = properties.getProperty("db.username", DEFAULT_USER);
-        String pass = properties.getProperty("db.password", DEFAULT_PASSWORD);
+        String url = getSetting("DB_URL", "db.url");
+        String user = getSetting("DB_USERNAME", "DB_USER", "db.username");
+        String pass = getSetting("DB_PASSWORD", "DB_PASS", "db.password");
+
+        if (url == null) {
+            throw new DatabaseUnavailableException(
+                "Database URL is missing. Please set DB_URL in your .env file."
+            );
+        }
+        if (user == null || pass == null) {
+            throw new DatabaseUnavailableException(
+                "Database credentials are missing. Please set DB_USERNAME and DB_PASSWORD in your .env file."
+            );
+        }
 
         try {
             return DriverManager.getConnection(url, user, pass);
@@ -129,11 +117,13 @@ public class DatabaseConnection {
     }
 
     public static String getDbUrl() {
-        return properties.getProperty("db.url", DEFAULT_URL);
+        String url = getSetting("DB_URL", "db.url");
+        return url != null ? url : "(unconfigured)";
     }
 
     public static String getDbUsername() {
-        return properties.getProperty("db.username", DEFAULT_USER);
+        String user = getSetting("DB_USERNAME", "DB_USER", "db.username");
+        return user != null ? user : "(unconfigured)";
     }
 
     public static void main(String[] args) {

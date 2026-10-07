@@ -32,10 +32,12 @@ public class SearchableComboBox extends JPanel {
         searchFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Type name or phone to filter...");
         searchFilterField.setPreferredSize(new Dimension(320, 36));
         searchFilterField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        searchFilterField.setAlignmentX(0.0f);
 
         customerComboBox.setPreferredSize(new Dimension(320, 38));
         customerComboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         customerComboBox.setFont(Theme.FONT_BODY);
+        customerComboBox.setAlignmentX(0.0f);
 
         add(searchFilterField);
         add(javax.swing.Box.createVerticalStrut(Theme.SPACE_8));

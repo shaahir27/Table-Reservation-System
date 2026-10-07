@@ -160,15 +160,21 @@ public class NewReservationPanel extends BasePanel {
         step1Body.setOpaque(false);
         step1Body.setAlignmentX(0.0f);
 
-        customerSelector.setPreferredSize(new Dimension(360, 80));
+        customerSelector.setPreferredSize(new Dimension(360, 84));
         step1Body.add(customerSelector);
 
         JButton newCustomerBtn = new JButton("+ New Customer");
         newCustomerBtn.setFont(Theme.FONT_BODY_BOLD);
         newCustomerBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        newCustomerBtn.setPreferredSize(new Dimension(140, 38));
+        newCustomerBtn.setPreferredSize(new Dimension(145, 38));
         newCustomerBtn.addActionListener(e -> openAddCustomerDialog());
-        step1Body.add(newCustomerBtn);
+
+        JPanel btnWrapper = new JPanel();
+        btnWrapper.setLayout(new BoxLayout(btnWrapper, BoxLayout.Y_AXIS));
+        btnWrapper.setOpaque(false);
+        btnWrapper.add(Box.createVerticalStrut(44));
+        btnWrapper.add(newCustomerBtn);
+        step1Body.add(btnWrapper);
 
         step1Card.add(step1Body);
         scrollContent.add(step1Card);

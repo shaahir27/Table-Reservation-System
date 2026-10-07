@@ -126,11 +126,16 @@ public class CustomerPanel extends BasePanel {
         JLabel formTitle = new JLabel("Customer Details");
         formTitle.setFont(Theme.FONT_SECTION);
         formTitle.setForeground(Theme.TEXT_PRIMARY);
+        formTitle.setAlignmentX(0.0f);
         leftCard.add(formTitle);
         leftCard.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Name
         leftCard.add(createFieldLabel("Full Name *"));
+        leftCard.add(Box.createVerticalStrut(4));
+        nameField.setPreferredSize(new Dimension(300, 38));
+        nameField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        nameField.setAlignmentX(0.0f);
         nameField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. Arun Sharma");
         leftCard.add(nameField);
         styleErrorLabel(nameErrorLabel);
@@ -139,6 +144,10 @@ public class CustomerPanel extends BasePanel {
 
         // Phone
         leftCard.add(createFieldLabel("Phone Number * (10 Digits)"));
+        leftCard.add(Box.createVerticalStrut(4));
+        phoneField.setPreferredSize(new Dimension(300, 38));
+        phoneField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        phoneField.setAlignmentX(0.0f);
         phoneField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. 9876543210");
         leftCard.add(phoneField);
         styleErrorLabel(phoneErrorLabel);
@@ -147,6 +156,10 @@ public class CustomerPanel extends BasePanel {
 
         // Email
         leftCard.add(createFieldLabel("Email Address (Optional)"));
+        leftCard.add(Box.createVerticalStrut(4));
+        emailField.setPreferredSize(new Dimension(300, 38));
+        emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        emailField.setAlignmentX(0.0f);
         emailField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. arun@example.com");
         leftCard.add(emailField);
         styleErrorLabel(emailErrorLabel);
@@ -156,6 +169,7 @@ public class CustomerPanel extends BasePanel {
         // Form Buttons
         JPanel buttonRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttonRow1.setOpaque(false);
+        buttonRow1.setAlignmentX(0.0f);
 
         addBtn = createPrimaryButton("Add Customer");
         addBtn.addActionListener(e -> onAddCustomer());
@@ -168,6 +182,7 @@ public class CustomerPanel extends BasePanel {
 
         JPanel buttonRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttonRow2.setOpaque(false);
+        buttonRow2.setAlignmentX(0.0f);
 
         deleteBtn = createDangerButton("Delete");
         deleteBtn.setEnabled(false);
@@ -453,6 +468,7 @@ public class CustomerPanel extends BasePanel {
         JLabel label = new JLabel(text);
         label.setFont(Theme.FONT_SMALL_BOLD);
         label.setForeground(Theme.TEXT_MUTED);
+        label.setAlignmentX(0.0f);
         return label;
     }
 

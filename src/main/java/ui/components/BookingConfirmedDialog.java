@@ -62,6 +62,7 @@ public class BookingConfirmedDialog extends JDialog {
         ticketPanel.setOpaque(false);
         ticketPanel.setLayout(new BoxLayout(ticketPanel, BoxLayout.Y_AXIS));
         ticketPanel.setBorder(BorderFactory.createEmptyBorder(24, 32, 24, 32));
+        ticketPanel.setPreferredSize(new Dimension(500, 360));
 
         // Header Title
         JLabel badge = new JLabel("✓  RESERVATION CONFIRMED", JLabel.CENTER);

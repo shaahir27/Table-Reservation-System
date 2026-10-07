@@ -1,5 +1,6 @@
 package ui;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import model.ReservationDetail;
 import model.ReservationFilter;
 import model.ReservationStatus;
@@ -12,6 +13,8 @@ import ui.components.Toast;
 import util.Ui;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -91,13 +94,17 @@ public class ReservationsPanel extends BasePanel {
         dateFilterCheckBox.addActionListener(e -> dateSpinner.setEnabled(dateFilterCheckBox.isSelected()));
 
         searchBtn = createPrimaryButton("Search");
+        searchBtn.setPreferredSize(new Dimension(100, 36));
+
         resetBtn = createSecondaryButton("Reset");
+        resetBtn.setPreferredSize(new Dimension(85, 36));
 
         cancelBtn = createDangerButton("Cancel Reservation");
         cancelBtn.setEnabled(false);
 
         markCompletedBtn = createSecondaryButton("Mark Completed");
         markCompletedBtn.setEnabled(false);
+        markCompletedBtn.setPreferredSize(new Dimension(145, 36));
 
         // Setup results table
         tableModel = new DefaultTableModel(new String[]{
@@ -170,34 +177,58 @@ public class ReservationsPanel extends BasePanel {
         JPanel mainLayout = new JPanel(new BorderLayout(0, Theme.SPACE_16));
         mainLayout.setOpaque(false);
 
-        // 1. Filter Card
+        // 1. Filter Card (2-Row Spacious, Responsive Layout)
         JPanel filterCard = createCardPanel();
-        filterCard.setLayout(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, Theme.SPACE_8));
+        filterCard.setLayout(new BoxLayout(filterCard, BoxLayout.Y_AXIS));
 
-        searchTextField.setPreferredSize(new Dimension(240, 36));
-        searchTextField.putClientProperty("JTextField.placeholderText", "Search ID, name, phone, table...");
+        // Row 1: Search field + Search & Reset actions
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, 0));
+        row1.setOpaque(false);
+        row1.setAlignmentX(0.0f);
 
-        filterCard.add(searchTextField);
-        filterCard.add(dateFilterCheckBox);
-        dateSpinner.setPreferredSize(new Dimension(120, 36));
-        filterCard.add(dateSpinner);
+        searchTextField.setPreferredSize(new Dimension(320, 36));
+        searchTextField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search by ID, customer name, phone, or table...");
 
+        row1.add(searchTextField);
+        row1.add(searchBtn);
+        row1.add(resetBtn);
+
+        // Row 2: Date filter + Status filter + Table filter with comfortable spacing
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_24, 0));
+        row2.setOpaque(false);
+        row2.setAlignmentX(0.0f);
+
+        JPanel dateGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        dateGroup.setOpaque(false);
+        dateSpinner.setPreferredSize(new Dimension(125, 36));
+        dateGroup.add(dateFilterCheckBox);
+        dateGroup.add(dateSpinner);
+
+        JPanel statusGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        statusGroup.setOpaque(false);
         JLabel statusLabel = new JLabel("Status:");
         statusLabel.setFont(Theme.FONT_BODY_BOLD);
         statusLabel.setForeground(Theme.TEXT_PRIMARY);
-        filterCard.add(statusLabel);
-        statusFilterCombo.setPreferredSize(new Dimension(130, 36));
-        filterCard.add(statusFilterCombo);
+        statusFilterCombo.setPreferredSize(new Dimension(135, 36));
+        statusGroup.add(statusLabel);
+        statusGroup.add(statusFilterCombo);
 
+        JPanel tableGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        tableGroup.setOpaque(false);
         JLabel tableLabel = new JLabel("Table:");
         tableLabel.setFont(Theme.FONT_BODY_BOLD);
         tableLabel.setForeground(Theme.TEXT_PRIMARY);
-        filterCard.add(tableLabel);
-        tableFilterCombo.setPreferredSize(new Dimension(110, 36));
-        filterCard.add(tableFilterCombo);
+        tableFilterCombo.setPreferredSize(new Dimension(120, 36));
+        tableGroup.add(tableLabel);
+        tableGroup.add(tableFilterCombo);
 
-        filterCard.add(searchBtn);
-        filterCard.add(resetBtn);
+        row2.add(dateGroup);
+        row2.add(statusGroup);
+        row2.add(tableGroup);
+
+        filterCard.add(row1);
+        filterCard.add(Box.createVerticalStrut(Theme.SPACE_12));
+        filterCard.add(row2);
 
         mainLayout.add(filterCard, BorderLayout.NORTH);
 

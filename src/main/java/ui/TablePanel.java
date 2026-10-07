@@ -176,11 +176,16 @@ public class TablePanel extends BasePanel {
         JLabel title = new JLabel("Table Details");
         title.setFont(Theme.FONT_SECTION);
         title.setForeground(Theme.TEXT_PRIMARY);
+        title.setAlignmentX(0.0f);
         card.add(title);
         card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Table Number
         card.add(createFieldLabel("Table Number * (e.g. T01)"));
+        card.add(Box.createVerticalStrut(4));
+        tableNumberField.setPreferredSize(new Dimension(300, 38));
+        tableNumberField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        tableNumberField.setAlignmentX(0.0f);
         tableNumberField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. T01");
         card.add(tableNumberField);
         styleErrorLabel(tableNumberErrorLabel);
@@ -189,6 +194,10 @@ public class TablePanel extends BasePanel {
 
         // Capacity
         card.add(createFieldLabel("Seating Capacity * (1–20)"));
+        card.add(Box.createVerticalStrut(4));
+        capacitySpinner.setPreferredSize(new Dimension(300, 38));
+        capacitySpinner.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        capacitySpinner.setAlignmentX(0.0f);
         card.add(capacitySpinner);
         styleErrorLabel(capacityErrorLabel);
         card.add(capacityErrorLabel);
@@ -196,7 +205,11 @@ public class TablePanel extends BasePanel {
 
         // Location
         card.add(createFieldLabel("Location / Section *"));
+        card.add(Box.createVerticalStrut(4));
         locationComboBox.setEditable(true);
+        locationComboBox.setPreferredSize(new Dimension(300, 38));
+        locationComboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        locationComboBox.setAlignmentX(0.0f);
         card.add(locationComboBox);
         styleErrorLabel(locationErrorLabel);
         card.add(locationErrorLabel);
@@ -204,12 +217,17 @@ public class TablePanel extends BasePanel {
 
         // Status
         card.add(createFieldLabel("Operational Status *"));
+        card.add(Box.createVerticalStrut(4));
+        statusComboBox.setPreferredSize(new Dimension(300, 38));
+        statusComboBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        statusComboBox.setAlignmentX(0.0f);
         card.add(statusComboBox);
         card.add(Box.createVerticalStrut(Theme.SPACE_24));
 
         // Buttons
         JPanel buttonRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttonRow1.setOpaque(false);
+        buttonRow1.setAlignmentX(0.0f);
 
         addBtn = createPrimaryButton("Add Table");
         addBtn.addActionListener(e -> onAddTable());
@@ -222,6 +240,7 @@ public class TablePanel extends BasePanel {
 
         JPanel buttonRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttonRow2.setOpaque(false);
+        buttonRow2.setAlignmentX(0.0f);
 
         deleteBtn = createDangerButton("Delete");
         deleteBtn.setEnabled(false);

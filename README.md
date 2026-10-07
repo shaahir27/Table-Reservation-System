@@ -19,7 +19,7 @@ Built for **Object-Oriented Programming Using Java and Database Technology Labor
 
 ## 2. Technology Stack & Prerequisites
 
-- **Java Development Kit:** Java 17 or higher (Java 17, 21, or 25 supported).
+- **Java Development Kit:** Java 21 or higher (Java 21 or 25 recommended).
 - **Build Tool:** Apache Maven 3.8+.
 - **Database Engine:** Oracle Database XE (11g, 18c, or 21c).
 - **Core Libraries:**
@@ -39,7 +39,7 @@ Open SQL*Plus or SQL Developer as `SYS` or `SYSTEM`:
 ALTER SESSION SET CONTAINER = XEPDB1;
 
 -- Create dedicated application user
-CREATE USER rtrs IDENTIFIED BY RtrsPass123;
+CREATE USER rtrs IDENTIFIED BY your_db_password;
 GRANT CONNECT, RESOURCE TO rtrs;
 ALTER USER rtrs QUOTA UNLIMITED ON USERS;
 ```
@@ -48,7 +48,7 @@ ALTER USER rtrs QUOTA UNLIMITED ON USERS;
 Connect as the new user `rtrs` and execute the schema and seed scripts:
 
 ```sql
-CONNECT rtrs/RtrsPass123@localhost:1521/XEPDB1;
+CONNECT rtrs/your_db_password@localhost:1521/XEPDB1;
 
 -- 1. Create tables, sequences, indexes, and triggers
 @sql/01_schema.sql
@@ -67,14 +67,14 @@ Configuration can be set via `.env` or `config.properties` in the project root d
 ```ini
 DB_URL=jdbc:oracle:thin:@localhost:1521/XEPDB1
 DB_USER=rtrs
-DB_PASSWORD=RtrsPass123
+DB_PASSWORD=your_db_password
 ```
 
 ### Option B: `config.properties` file
 ```properties
 db.url=jdbc:oracle:thin:@localhost:1521/XEPDB1
 db.user=rtrs
-db.password=RtrsPass123
+db.password=your_db_password
 ```
 
 *(Note: Sensitive credential files are excluded from version control via `.gitignore`.)*
@@ -117,7 +117,7 @@ This produces the self-contained, executable jar at:
 To demonstrate that Oracle itself rejects concurrent double bookings, run the provided SQL verification script:
 
 ```bash
-sqlplus rtrs/RtrsPass123@localhost:1521/XEPDB1 @sql/04_double_booking_demo.sql
+sqlplus rtrs/your_db_password@localhost:1521/XEPDB1 @sql/04_double_booking_demo.sql
 ```
 
 **Observation:**
@@ -130,6 +130,14 @@ sqlplus rtrs/RtrsPass123@localhost:1521/XEPDB1 @sql/04_double_booking_demo.sql
 
 ## 7. Project Documentation Index
 
+### 📘 Comprehensive Project Reference Guides (In-Depth & Layman-Friendly)
+- **[01. System Architecture, Build & Dependencies](docs/01_ARCHITECTURE_AND_DEPENDENCIES.md):** High-level architecture, Maven build system, FlatLaf & Inter dependencies, threading model (`Ui.async`), logging (`AppLog`), and project file map.
+- **[02. Oracle Database In-Depth](docs/02_DATABASE_IN_DEPTH.md):** Complete schema tables, JDBC lifecycle, function-based unique index mechanics (`UQ_ACTIVE_BOOKING`), capacity triggers, error code mapping, and 1NF–BCNF normalization.
+- **[03. Java Backend & Modules](docs/03_JAVA_BACKEND_AND_MODULES.md):** OOP principles showcase, domain models, generic `CrudDAO<T, ID>`, transaction boundaries, pessimistic locking (`FOR UPDATE`), table recommendation algorithm, and validation engine.
+- **[04. Java Swing Presentation Layer](docs/04_UI_AND_PRESENTATION_LAYER.md):** Theme design tokens, `MainFrame` 3-state shell, 6 functional screens, 3-step booking flow, interactive Floor View, and custom `Graphics2D` components (`TableCard`, `BarChartPanel`, `Toast`).
+- **[05. Testing Verification & Viva Voce Guide](docs/05_TESTING_VERIFICATION_AND_VIVA_GUIDE.md):** JUnit 5 automated test suite (20 tests), 15 end-to-end specification test matrix, live SQL proof walkthrough, and 12 Viva Voce defense Q&As with code references.
+
+### 📄 Specialized Technical Briefs
 - [Database Normalization Derivation](docs/NORMALIZATION.md): 1NF $\rightarrow$ 2NF $\rightarrow$ 3NF/BCNF derivation, functional dependencies, and operational anomalies.
 - [Entity-Relationship Diagram](docs/ER.md): Visual Mermaid ER diagram and schema dictionary.
 - [System Architecture](docs/ARCHITECTURE.md): Multi-tiered architectural layers, threading model, and concurrency diagrams.
