@@ -19,6 +19,7 @@ public class Theme {
     public static final Color CARD_BG = Color.decode("#FFFFFF");
     public static final Color CARD_BORDER = Color.decode("#E7E3DC");
     public static final Color TEXT_PRIMARY = Color.decode("#1E2024");
+    public static final Color TEXT_SECONDARY = Color.decode("#4B5563");
     public static final Color TEXT_MUTED = Color.decode("#6B7078");
     public static final Color SUCCESS = Color.decode("#2E7D5B");
     public static final Color DANGER = Color.decode("#C0392B");
@@ -28,13 +29,16 @@ public class Theme {
     public static final Color HOVER_ROW_BG = Color.decode("#F8F7F4");
 
     // Spacing
+    public static final int SPACE_4 = 4;
     public static final int SPACE_8 = 8;
     public static final int SPACE_12 = 12;
     public static final int SPACE_16 = 16;
+    public static final int SPACE_20 = 20;
     public static final int SPACE_24 = 24;
     public static final int SPACE_32 = 32;
 
     // Typography
+    public static final Font FONT_HERO = new Font(FlatInterFont.FAMILY, Font.BOLD, 36);
     public static final Font FONT_TITLE = new Font(FlatInterFont.FAMILY, Font.BOLD, 26);
     public static final Font FONT_SECTION = new Font(FlatInterFont.FAMILY, Font.BOLD, 16);
     public static final Font FONT_BODY = new Font(FlatInterFont.FAMILY, Font.PLAIN, 14);

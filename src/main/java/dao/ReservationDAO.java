@@ -34,8 +34,8 @@ public class ReservationDAO {
 
     public Reservation createReservation(Connection con, Reservation reservation) throws SQLException {
         String sql = "INSERT INTO reservation (" +
-                     "  reservation_id, customer_id, table_id, reservation_date, slot_id, guest_count, status" +
-                     ") VALUES (reservation_seq.NEXTVAL, ?, ?, ?, ?, ?, ?)";
+                     "  reservation_id, customer_id, table_id, reservation_date, slot_id, guest_count, status, created_by" +
+                     ") VALUES (reservation_seq.NEXTVAL, ?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement ps = con.prepareStatement(sql, new String[]{"RESERVATION_ID"})) {
             ps.setInt(1, reservation.getCustomerId());
@@ -44,6 +44,11 @@ public class ReservationDAO {
             ps.setInt(4, reservation.getSlotId());
             ps.setInt(5, reservation.getGuestCount());
             ps.setString(6, reservation.getStatus() != null ? reservation.getStatus().name() : "CONFIRMED");
+            if (reservation.getCreatedBy() != null && reservation.getCreatedBy() > 0) {
+                ps.setInt(7, reservation.getCreatedBy());
+            } else {
+                ps.setNull(7, java.sql.Types.NUMERIC);
+            }
             ps.executeUpdate();
 
             try (ResultSet rs = ps.getGeneratedKeys()) {
@@ -397,6 +402,15 @@ public class ReservationDAO {
         Timestamp ts = rs.getTimestamp("created_at");
         LocalDateTime createdAt = ts != null ? ts.toLocalDateTime() : util.DbClock.localDateTime();
 
+        Integer createdBy = null;
+        try {
+            int cb = rs.getInt("created_by");
+            if (!rs.wasNull()) {
+                createdBy = cb;
+            }
+        } catch (SQLException ignored) {
+        }
+
         return new Reservation(
                 rs.getInt("reservation_id"),
                 rs.getInt("customer_id"),
@@ -405,7 +419,8 @@ public class ReservationDAO {
                 rs.getInt("slot_id"),
                 rs.getInt("guest_count"),
                 ReservationStatus.valueOf(rs.getString("status")),
-                createdAt
+                createdAt,
+                createdBy
         );
     }
 

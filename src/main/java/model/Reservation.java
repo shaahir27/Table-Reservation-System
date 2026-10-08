@@ -16,6 +16,7 @@ public class Reservation {
     private int guestCount;
     private ReservationStatus status;
     private LocalDateTime createdAt;
+    private Integer createdBy;
 
     public Reservation() {
         this.status = ReservationStatus.CONFIRMED;
@@ -23,6 +24,11 @@ public class Reservation {
 
     public Reservation(int reservationId, int customerId, int tableId, LocalDate reservationDate, 
                        int slotId, int guestCount, ReservationStatus status, LocalDateTime createdAt) {
+        this(reservationId, customerId, tableId, reservationDate, slotId, guestCount, status, createdAt, null);
+    }
+
+    public Reservation(int reservationId, int customerId, int tableId, LocalDate reservationDate, 
+                       int slotId, int guestCount, ReservationStatus status, LocalDateTime createdAt, Integer createdBy) {
         this.reservationId = reservationId;
         this.customerId = customerId;
         this.tableId = tableId;
@@ -31,10 +37,11 @@ public class Reservation {
         this.guestCount = guestCount;
         this.status = status != null ? status : ReservationStatus.CONFIRMED;
         this.createdAt = createdAt;
+        this.createdBy = createdBy;
     }
 
     public Reservation(int customerId, int tableId, LocalDate reservationDate, int slotId, int guestCount) {
-        this(0, customerId, tableId, reservationDate, slotId, guestCount, ReservationStatus.CONFIRMED, util.DbClock.localDateTime());
+        this(0, customerId, tableId, reservationDate, slotId, guestCount, ReservationStatus.CONFIRMED, util.DbClock.localDateTime(), null);
     }
 
     public int getReservationId() {
@@ -99,6 +106,14 @@ public class Reservation {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Integer getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(Integer createdBy) {
+        this.createdBy = createdBy;
     }
 
     public String getDisplayCode() {

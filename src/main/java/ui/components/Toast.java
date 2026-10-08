@@ -26,6 +26,12 @@ public class Toast extends JWindow {
         INFO
     }
 
+    public static void show(java.awt.Component comp, String message, Type type) {
+        if (comp == null) return;
+        Window owner = comp instanceof Window w ? w : SwingUtilities.getWindowAncestor(comp);
+        show(owner, message, type);
+    }
+
     public static void show(Window owner, String message, Type type) {
         if (owner == null) return;
         SwingUtilities.invokeLater(() -> {
@@ -34,16 +40,16 @@ public class Toast extends JWindow {
         });
     }
 
-    public static void success(Window owner, String message) {
-        show(owner, message, Type.SUCCESS);
+    public static void success(java.awt.Component comp, String message) {
+        show(comp, message, Type.SUCCESS);
     }
 
-    public static void error(Window owner, String message) {
-        show(owner, message, Type.ERROR);
+    public static void error(java.awt.Component comp, String message) {
+        show(comp, message, Type.ERROR);
     }
 
-    public static void info(Window owner, String message) {
-        show(owner, message, Type.INFO);
+    public static void info(java.awt.Component comp, String message) {
+        show(comp, message, Type.INFO);
     }
 
     private final Window owner;

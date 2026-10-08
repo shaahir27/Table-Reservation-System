@@ -1,5 +1,7 @@
 package ui;
 
+import model.AppUser;
+
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -28,8 +30,23 @@ public class Sidebar extends JPanel {
     private final List<NavItemPanel> navItems = new ArrayList<>();
     private String currentScreen = "DASHBOARD";
 
+    private final AppUser currentUser;
+    private final Runnable onChangePassword;
+    private final Runnable onLockScreen;
+    private final Runnable onSignOut;
+
     public Sidebar(Consumer<String> onNavigate) {
+        this(security.Session.getInstance().currentUser(), onNavigate, null, null, null);
+    }
+
+    public Sidebar(AppUser currentUser, Consumer<String> onNavigate, 
+                   Runnable onChangePassword, Runnable onLockScreen, Runnable onSignOut) {
+        this.currentUser = currentUser;
         this.onNavigate = onNavigate;
+        this.onChangePassword = onChangePassword;
+        this.onLockScreen = onLockScreen;
+        this.onSignOut = onSignOut;
+
         setPreferredSize(new Dimension(220, 760));
         setBackground(Theme.SIDEBAR_BG);
         setLayout(new BorderLayout());
@@ -37,7 +54,7 @@ public class Sidebar extends JPanel {
         JPanel container = new JPanel();
         container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
         container.setOpaque(false);
-        container.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_24, Theme.SPACE_16, Theme.SPACE_24, Theme.SPACE_16));
+        container.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_24, Theme.SPACE_16, Theme.SPACE_16, Theme.SPACE_16));
 
         // Brand Logo / Title
         JLabel brand = new JLabel("Reserve");
@@ -80,27 +97,108 @@ public class Sidebar extends JPanel {
 
         container.add(Box.createVerticalStrut(Theme.SPACE_24));
 
-        // Navigation Items
+        // Navigation Items - Filtered by Role
+        boolean isManager = currentUser == null || currentUser.getRole() == security.Role.MANAGER;
+
         addNavItem(container, "Dashboard", "DASHBOARD");
         addNavItem(container, "Reservations", "RESERVATIONS");
         addNavItem(container, "Customers", "CUSTOMERS");
-        addNavItem(container, "Tables", "TABLES");
-        addNavItem(container, "Reports", "REPORTS");
+
+        if (isManager) {
+            addNavItem(container, "Tables", "TABLES");
+            addNavItem(container, "Reports", "REPORTS");
+            addNavItem(container, "Staff", "STAFF");
+            addNavItem(container, "Audit Log", "AUDIT");
+        }
 
         add(container, BorderLayout.NORTH);
 
-        // Footer / Version
-        JPanel footer = new JPanel();
-        footer.setOpaque(false);
-        footer.setBorder(BorderFactory.createEmptyBorder(0, Theme.SPACE_16, Theme.SPACE_16, Theme.SPACE_16));
-        JLabel versionLabel = new JLabel("v1.0 • Standalone");
-        versionLabel.setFont(Theme.FONT_SMALL);
-        versionLabel.setForeground(Theme.TEXT_MUTED);
-        footer.add(versionLabel);
-        add(footer, BorderLayout.SOUTH);
+        // Footer User Profile Card
+        add(createUserFooterPanel(), BorderLayout.SOUTH);
 
         // Default selection
         setSelectedScreen("DASHBOARD");
+    }
+
+    private JPanel createUserFooterPanel() {
+        JPanel footer = new JPanel(new BorderLayout(10, 0));
+        footer.setOpaque(false);
+        footer.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.CARD_BORDER),
+                BorderFactory.createEmptyBorder(12, 14, 12, 14)
+        ));
+        footer.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        String initials = currentUser != null ? currentUser.getInitials() : "U";
+        String name = currentUser != null ? currentUser.getFullName() : "User";
+        String role = currentUser != null && currentUser.getRole() != null ? currentUser.getRole().name() : "STAFF";
+
+        // Avatar
+        JPanel avatar = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor("MANAGER".equalsIgnoreCase(role) ? Theme.ACCENT_GOLD : new Color(100, 116, 139));
+                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.setColor(Color.WHITE);
+                g2.setFont(Theme.FONT_SMALL_BOLD);
+                var fm = g2.getFontMetrics();
+                int x = (getWidth() - fm.stringWidth(initials)) / 2;
+                int y = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+                g2.drawString(initials, x, y);
+                g2.dispose();
+            }
+        };
+        avatar.setPreferredSize(new Dimension(34, 34));
+        avatar.setOpaque(false);
+        footer.add(avatar, BorderLayout.WEST);
+
+        // Name & Role
+        JPanel textPanel = new JPanel();
+        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
+        textPanel.setOpaque(false);
+
+        JLabel nameLabel = new JLabel(name.length() > 14 ? name.substring(0, 12) + "…" : name);
+        nameLabel.setFont(Theme.FONT_BODY_BOLD);
+        nameLabel.setForeground(Theme.TEXT_PRIMARY);
+
+        JLabel roleLabel = new JLabel(role);
+        roleLabel.setFont(Theme.FONT_SMALL);
+        roleLabel.setForeground("MANAGER".equalsIgnoreCase(role) ? Theme.ACCENT_GOLD : Theme.TEXT_MUTED);
+
+        textPanel.add(nameLabel);
+        textPanel.add(roleLabel);
+        footer.add(textPanel, BorderLayout.CENTER);
+
+        // Popup Menu on Click
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        if (onChangePassword != null) {
+            javax.swing.JMenuItem changePwdItem = new javax.swing.JMenuItem("Change Password...");
+            changePwdItem.addActionListener(e -> onChangePassword.run());
+            menu.add(changePwdItem);
+        }
+        if (onLockScreen != null) {
+            javax.swing.JMenuItem lockItem = new javax.swing.JMenuItem("Lock Screen");
+            lockItem.addActionListener(e -> onLockScreen.run());
+            menu.add(lockItem);
+        }
+        if (onSignOut != null) {
+            menu.addSeparator();
+            javax.swing.JMenuItem signOutItem = new javax.swing.JMenuItem("Sign Out");
+            signOutItem.setForeground(Theme.DANGER);
+            signOutItem.addActionListener(e -> onSignOut.run());
+            menu.add(signOutItem);
+        }
+
+        footer.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                menu.show(footer, 0, -menu.getPreferredSize().height - 5);
+            }
+        });
+
+        return footer;
     }
 
     private void addNavItem(JPanel container, String title, String screenKey) {

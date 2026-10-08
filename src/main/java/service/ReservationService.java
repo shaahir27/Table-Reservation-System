@@ -1,5 +1,6 @@
 package service;
 
+import dao.AuditDAO;
 import dao.CustomerDAO;
 import dao.ReservationDAO;
 import dao.TableDAO;
@@ -16,6 +17,9 @@ import model.TableAvailability;
 import model.TableState;
 import model.TableStatus;
 import model.TimeSlot;
+import security.AuthContext;
+import security.Permission;
+import security.Session;
 import util.AppLog;
 import util.DbClock;
 import util.OracleErrorMapper;
@@ -39,20 +43,30 @@ public class ReservationService {
     private final TableDAO tableDAO;
     private final CustomerDAO customerDAO;
     private final TimeSlotDAO timeSlotDAO;
+    private final AuditDAO auditDAO;
+    private final AuthContext auth;
 
     // In-memory cache for static time slots
     private List<TimeSlot> cachedSlots = null;
 
     public ReservationService() {
-        this(new ReservationDAO(), new TableDAO(), new CustomerDAO(), new TimeSlotDAO());
+        this(new ReservationDAO(), new TableDAO(), new CustomerDAO(), new TimeSlotDAO(), new AuditDAO(), Session.getInstance());
     }
 
     public ReservationService(ReservationDAO reservationDAO, TableDAO tableDAO, 
                               CustomerDAO customerDAO, TimeSlotDAO timeSlotDAO) {
+        this(reservationDAO, tableDAO, customerDAO, timeSlotDAO, new AuditDAO(), Session.getInstance());
+    }
+
+    public ReservationService(ReservationDAO reservationDAO, TableDAO tableDAO, 
+                              CustomerDAO customerDAO, TimeSlotDAO timeSlotDAO,
+                              AuditDAO auditDAO, AuthContext auth) {
         this.reservationDAO = reservationDAO;
         this.tableDAO = tableDAO;
         this.customerDAO = customerDAO;
         this.timeSlotDAO = timeSlotDAO;
+        this.auditDAO = auditDAO != null ? auditDAO : new AuditDAO();
+        this.auth = auth != null ? auth : Session.getInstance();
     }
 
     /**
@@ -129,6 +143,8 @@ public class ReservationService {
      * Uses pessimistic locking (SELECT ... FOR UPDATE) and Oracle's unique index.
      */
     public Reservation bookTable(int customerId, int tableId, LocalDate date, TimeSlot slot, int guests) {
+        auth.require(Permission.RESERVATION_CREATE);
+
         // Retrieve and pre-validate table & customer
         Customer customer = customerDAO.getCustomerById(customerId);
         if (customer == null) {
@@ -163,8 +179,14 @@ public class ReservationService {
                 }
 
                 // 4. Insert reservation. Oracle's UQ_ACTIVE_BOOKING function-based unique index is the real guarantee
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
                 Reservation newReservation = new Reservation(customerId, tableId, date, slot.getSlotId(), guests);
+                newReservation.setCreatedBy(userId);
                 Reservation created = reservationDAO.createReservation(con, newReservation);
+
+                // 5. Transactional audit log entry in the same transaction
+                auditDAO.log(con, userId, "RES_CREATED", "RESERVATION", (long) created.getReservationId(),
+                        "Table " + lockedTable.getTableNumber() + " · " + date + " · " + slot.getLabel() + " · " + guests + " guests");
 
                 con.commit();
                 AppLog.info("Successfully booked reservation " + created.getDisplayCode() + " for Table " + lockedTable.getTableNumber());
@@ -190,10 +212,13 @@ public class ReservationService {
      * while the record is preserved in the database for auditing.
      */
     public void cancelReservation(int reservationId) {
+        auth.require(Permission.RESERVATION_CANCEL);
         boolean success = reservationDAO.cancelReservation(reservationId);
         if (!success) {
             throw new ValidationException("Reservation RES" + reservationId + " could not be cancelled. It may already be cancelled or completed.");
         }
+        Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+        auditDAO.log(userId, "RES_CANCELLED", "RESERVATION", (long) reservationId, "Cancelled reservation RES" + reservationId);
         AppLog.info("Cancelled reservation RES" + reservationId);
     }
 

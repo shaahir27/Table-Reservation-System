@@ -2,7 +2,20 @@ package ui;
 
 import db.DatabaseConnection;
 import exception.DatabaseUnavailableException;
+import model.AppUser;
+import security.IdleLockMonitor;
+import security.Role;
+import security.Session;
+import service.AuditService;
+import service.AuthService;
+import service.SettingsService;
+import service.UserService;
+import ui.auth.ChangePasswordDialog;
+import ui.auth.FirstRunSetupPanel;
+import ui.auth.LockOverlay;
+import ui.auth.LoginPanel;
 import util.AppLog;
+import util.DbClock;
 import util.Ui;
 
 import javax.swing.BorderFactory;
@@ -24,29 +37,45 @@ import java.awt.RenderingHints;
 
 /**
  * Main application window (min 1200x760).
- * Features startup database health checks, friendly connection failure screen with retry,
- * and a responsive master-detail layout containing the Sidebar and CardLayout views.
+ * Features startup database health checks, authentication flow with first-run setup,
+ * role-based app shell construction, idle-lock screen overlay, and session lifecycle.
  */
 public class MainFrame extends JFrame {
     private static final String ROOT_SPLASH = "SPLASH";
     private static final String ROOT_ERROR = "DB_ERROR";
+    private static final String ROOT_SETUP = "SETUP";
+    private static final String ROOT_LOGIN = "LOGIN";
     private static final String ROOT_APP = "APP_SHELL";
 
     private final CardLayout rootLayout = new CardLayout();
     private final JPanel rootContainer = new JPanel(rootLayout);
 
-    // App Shell Components
-    private Sidebar sidebar;
-    private final CardLayout contentLayout = new CardLayout();
-    private final JPanel contentContainer = new JPanel(contentLayout);
+    // Backend Services
+    private final AuthService authService = new AuthService();
+    private final UserService userService = new UserService();
+    private final AuditService auditService = new AuditService();
+    private final SettingsService settingsService = new SettingsService();
 
-    // Panels
+    // Auth Views
+    private LoginPanel loginPanel;
+    private FirstRunSetupPanel firstRunSetupPanel;
+    private LockOverlay lockOverlay;
+
+    // Shell Container & Layout
+    private JPanel appShellPanel;
+    private Sidebar sidebar;
+    private CardLayout contentLayout;
+    private JPanel contentContainer;
+
+    // Active View Panels
     private DashboardPanel dashboardPanel;
     private NewReservationPanel newReservationPanel;
     private ReservationsPanel reservationsPanel;
     private CustomerPanel customerPanel;
     private TablePanel tablePanel;
     private ReportsPanel reportsPanel;
+    private StaffPanel staffPanel;
+    private AuditPanel auditPanel;
 
     // DB Error Components
     private JLabel errorReasonLabel;
@@ -61,12 +90,34 @@ public class MainFrame extends JFrame {
 
         initViews();
         setContentPane(rootContainer);
+
+        // Lock screen glass pane
+        lockOverlay = new LockOverlay(this::unlockScreen, this::signOut);
+        setGlassPane(lockOverlay);
     }
 
     private void initViews() {
+        loginPanel = new LoginPanel(
+                authService,
+                this::handleLoginSuccess,
+                () -> rootLayout.show(rootContainer, ROOT_SETUP)
+        );
+
+        firstRunSetupPanel = new FirstRunSetupPanel(
+                authService,
+                user -> {
+                    Session.login(user);
+                    handleLoginSuccess(user);
+                }
+        );
+
+        appShellPanel = new JPanel(new BorderLayout());
+
         rootContainer.add(createSplashPanel(), ROOT_SPLASH);
         rootContainer.add(createDbErrorPanel(), ROOT_ERROR);
-        rootContainer.add(createAppShellPanel(), ROOT_APP);
+        rootContainer.add(firstRunSetupPanel, ROOT_SETUP);
+        rootContainer.add(loginPanel, ROOT_LOGIN);
+        rootContainer.add(appShellPanel, ROOT_APP);
 
         showSplash();
     }
@@ -135,7 +186,7 @@ public class MainFrame extends JFrame {
         errorReasonLabel.setForeground(Theme.TEXT_MUTED);
         errorReasonLabel.setAlignmentX(0.5f);
 
-        JLabel hintLabel = new JLabel("<html><div style='text-align:center;'>Hint: Check <b>config.properties</b> and ensure Oracle XE is running on your machine.</div></html>", SwingConstants.CENTER);
+        JLabel hintLabel = new JLabel("<html><div style='text-align:center;'>Hint: Check <b>config.properties</b> or <b>.env</b> and ensure Oracle XE is running.</div></html>", SwingConstants.CENTER);
         hintLabel.setFont(Theme.FONT_SMALL);
         hintLabel.setForeground(Theme.TEXT_MUTED);
         hintLabel.setAlignmentX(0.5f);
@@ -181,35 +232,6 @@ public class MainFrame extends JFrame {
         return panel;
     }
 
-    private JPanel createAppShellPanel() {
-        JPanel shell = new JPanel(new BorderLayout());
-        sidebar = new Sidebar(this::showScreen);
-        shell.add(sidebar, BorderLayout.WEST);
-
-        // Screens
-        dashboardPanel = new DashboardPanel(this::showScreen);
-        newReservationPanel = new NewReservationPanel();
-        reservationsPanel = new ReservationsPanel();
-        customerPanel = new CustomerPanel();
-        tablePanel = new TablePanel();
-        reportsPanel = new ReportsPanel();
-
-        contentContainer.add(dashboardPanel, "DASHBOARD");
-        contentContainer.add(newReservationPanel, "NEW_RESERVATION");
-        contentContainer.add(reservationsPanel, "RESERVATIONS");
-        contentContainer.add(customerPanel, "CUSTOMERS");
-        contentContainer.add(tablePanel, "TABLES");
-        contentContainer.add(reportsPanel, "REPORTS");
-
-        shell.add(contentContainer, BorderLayout.CENTER);
-        return shell;
-    }
-
-    public void showScreen(String screenKey) {
-        contentLayout.show(contentContainer, screenKey);
-        sidebar.setSelectedScreen(screenKey);
-    }
-
     public void checkDatabaseConnection() {
         showSplash();
         retryButton.setEnabled(false);
@@ -218,13 +240,17 @@ public class MainFrame extends JFrame {
         Ui.async(
                 () -> {
                     DatabaseConnection.testConnection();
-                    util.DbClock.syncWithDatabase();
-                    return true;
+                    DbClock.syncWithDatabase();
+                    return authService.hasUsers();
                 },
-                success -> {
-                    AppLog.info("Startup database verification passed.");
-                    rootLayout.show(rootContainer, ROOT_APP);
-                    showScreen("DASHBOARD");
+                hasUsers -> {
+                    AppLog.info("Startup database verification passed. Users present: " + hasUsers);
+                    if (hasUsers) {
+                        loginPanel.resetForm();
+                        rootLayout.show(rootContainer, ROOT_LOGIN);
+                    } else {
+                        rootLayout.show(rootContainer, ROOT_SETUP);
+                    }
                 },
                 error -> {
                     AppLog.warning("Startup database verification failed: " + error.getMessage());
@@ -242,18 +268,121 @@ public class MainFrame extends JFrame {
         );
     }
 
+    private void handleLoginSuccess(AppUser user) {
+        if (user.isMustChangePwd()) {
+            ChangePasswordDialog dlg = new ChangePasswordDialog(this, authService, user, true);
+            dlg.setVisible(true);
+        }
+
+        buildShell(user);
+
+        // Configure and start idle lock monitor
+        int idleMinutes = settingsService.getInt("idle_lock_minutes", 10);
+        IdleLockMonitor.getInstance().setIdleMinutes(idleMinutes);
+        IdleLockMonitor.getInstance().setLockCallback(this::lockScreen);
+        IdleLockMonitor.getInstance().start();
+
+        rootLayout.show(rootContainer, ROOT_APP);
+        showScreen("DASHBOARD");
+    }
+
+    private void buildShell(AppUser user) {
+        tearDownShell();
+
+        contentLayout = new CardLayout();
+        contentContainer = new JPanel(contentLayout);
+
+        sidebar = new Sidebar(
+                user,
+                this::showScreen,
+                this::showChangePasswordDialog,
+                this::lockScreen,
+                this::signOut
+        );
+        appShellPanel.add(sidebar, BorderLayout.WEST);
+
+        // Standard Panels
+        dashboardPanel = new DashboardPanel(this::showScreen);
+        newReservationPanel = new NewReservationPanel();
+        reservationsPanel = new ReservationsPanel();
+        customerPanel = new CustomerPanel();
+
+        contentContainer.add(dashboardPanel, "DASHBOARD");
+        contentContainer.add(newReservationPanel, "NEW_RESERVATION");
+        contentContainer.add(reservationsPanel, "RESERVATIONS");
+        contentContainer.add(customerPanel, "CUSTOMERS");
+
+        // Role-Gated Panels (Manager only)
+        if (user.getRole() == Role.MANAGER) {
+            tablePanel = new TablePanel();
+            reportsPanel = new ReportsPanel();
+            staffPanel = new StaffPanel(userService);
+            auditPanel = new AuditPanel(auditService);
+
+            contentContainer.add(tablePanel, "TABLES");
+            contentContainer.add(reportsPanel, "REPORTS");
+            contentContainer.add(staffPanel, "STAFF");
+            contentContainer.add(auditPanel, "AUDIT");
+        }
+
+        appShellPanel.add(contentContainer, BorderLayout.CENTER);
+        appShellPanel.revalidate();
+        appShellPanel.repaint();
+    }
+
+    private void tearDownShell() {
+        appShellPanel.removeAll();
+        contentContainer = null;
+        sidebar = null;
+        dashboardPanel = null;
+        newReservationPanel = null;
+        reservationsPanel = null;
+        customerPanel = null;
+        tablePanel = null;
+        reportsPanel = null;
+        staffPanel = null;
+        auditPanel = null;
+    }
+
+    public void showScreen(String screenKey) {
+        if (contentContainer != null && contentLayout != null) {
+            contentLayout.show(contentContainer, screenKey);
+            if (sidebar != null) {
+                sidebar.setSelectedScreen(screenKey);
+            }
+        }
+    }
+
+    public void lockScreen() {
+        if (Session.isLoggedIn()) {
+            lockOverlay.prepareForDisplay();
+            lockOverlay.setVisible(true);
+        }
+    }
+
+    public void unlockScreen() {
+        lockOverlay.setVisible(false);
+        IdleLockMonitor.getInstance().reset();
+    }
+
+    public void signOut() {
+        IdleLockMonitor.getInstance().stop();
+        lockOverlay.setVisible(false);
+        tearDownShell();
+        authService.logout();
+        loginPanel.resetForm();
+        rootLayout.show(rootContainer, ROOT_LOGIN);
+    }
+
+    public void showChangePasswordDialog() {
+        AppUser current = Session.getInstance().currentUser();
+        if (current != null) {
+            ChangePasswordDialog dlg = new ChangePasswordDialog(this, authService, current, false);
+            dlg.setVisible(true);
+        }
+    }
+
     public void showSplash() {
         rootLayout.show(rootContainer, ROOT_SPLASH);
-    }
-
-    // Accessors for panel updating in later phases
-    public void setCustomerPanel(CustomerPanel panel) {
-        this.customerPanel = panel;
-        contentContainer.add(panel, "CUSTOMERS");
-    }
-
-    public void setTablePanel(TablePanel panel) {
-        this.tablePanel = panel;
-        contentContainer.add(panel, "TABLES");
     }
 }

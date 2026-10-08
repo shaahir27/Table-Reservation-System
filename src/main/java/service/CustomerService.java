@@ -1,8 +1,12 @@
 package service;
 
+import dao.AuditDAO;
 import dao.CustomerDAO;
 import exception.ValidationException;
 import model.Customer;
+import security.AuthContext;
+import security.Permission;
+import security.Session;
 import util.ValidationUtil;
 
 import java.util.List;
@@ -12,16 +16,25 @@ import java.util.List;
  */
 public class CustomerService {
     private final CustomerDAO customerDAO;
+    private final AuditDAO auditDAO;
+    private final AuthContext auth;
 
     public CustomerService() {
-        this(new CustomerDAO());
+        this(new CustomerDAO(), new AuditDAO(), Session.getInstance());
     }
 
     public CustomerService(CustomerDAO customerDAO) {
+        this(customerDAO, new AuditDAO(), Session.getInstance());
+    }
+
+    public CustomerService(CustomerDAO customerDAO, AuditDAO auditDAO, AuthContext auth) {
         this.customerDAO = customerDAO;
+        this.auditDAO = auditDAO != null ? auditDAO : new AuditDAO();
+        this.auth = auth != null ? auth : Session.getInstance();
     }
 
     public Customer createCustomer(Customer customer) {
+        auth.require(Permission.CUSTOMER_EDIT);
         ValidationUtil.validateCustomer(customer);
         customer.setPhone(ValidationUtil.normalizePhone(customer.getPhone()));
 
@@ -30,10 +43,13 @@ public class CustomerService {
         }
 
         customerDAO.add(customer);
+        auditDAO.log("CUSTOMER_CREATED", "CUSTOMER", (long) customer.getCustomerId(),
+                "Created customer: " + customer.getName() + " (" + customer.getPhone() + ")");
         return customer;
     }
 
     public void updateCustomer(Customer customer) {
+        auth.require(Permission.CUSTOMER_EDIT);
         ValidationUtil.validateCustomer(customer);
         customer.setPhone(ValidationUtil.normalizePhone(customer.getPhone()));
 
@@ -42,10 +58,14 @@ public class CustomerService {
         }
 
         customerDAO.update(customer);
+        auditDAO.log("CUSTOMER_UPDATED", "CUSTOMER", (long) customer.getCustomerId(),
+                "Updated customer: " + customer.getName() + " (" + customer.getPhone() + ")");
     }
 
     public void deleteCustomer(int customerId) {
+        auth.require(Permission.CUSTOMER_DELETE);
         customerDAO.delete(customerId);
+        auditDAO.log("CUSTOMER_DELETED", "CUSTOMER", (long) customerId, "Deleted customer id " + customerId);
     }
 
     public Customer getCustomerById(int customerId) {

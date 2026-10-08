@@ -13,9 +13,14 @@ mvn test
 
 | Test Class | Method / Target | Tests Run | Pass | Fail | Description |
 |---|---|:---:|:---:|:---:|---|
-| `util.ValidationUtilTest` | Customer phone & email validation | 11 | 11 | 0 | Validates phone normalization, standard Indian mobile pattern `^[6-9]\d{9}$`, email syntax, and empty/whitespace names. |
-| `service.ReservationServiceTest` | Table recommendation algorithm | 9 | 9 | 0 | Tests best-fit table selection for varying party sizes (e.g. 3 guests → 4-seater), tie-breaking by lowest table number, capacity overflow, and null handling. |
-| **Total Automated** | | **20** | **20** | **0** | **100% Passing** |
+| `util.ValidationUtilTest` | Customer, table, slot validation & Unicode names | 12 | 12 | 0 | Validates phone normalization, Indian mobile regex, email syntax, Unicode/accented names, and table constraints. |
+| `service.ReservationServiceTest` | Table recommendation algorithm | 9 | 9 | 0 | Tests best-fit table selection for varying party sizes, tie-breaking by lowest table number, capacity overflow, and status checks. |
+| `util.DbClockTest` | Clock sync and deterministic fixed clock | 3 | 3 | 0 | Tests default system clock, fixed instant locking for tests, and java.time.Clock compatibility. |
+| `security.PasswordPolicyTest` | NIST SP 800-63B password rules | 6 | 6 | 0 | Validates min/max length, username similarity rejection, common password blocklist, and 0-4 entropy scoring. |
+| `security.RolePermissionMatrixTest` | Role & permission matrix coverage | 3 | 3 | 0 | Tests full MANAGER permissions, restricted HOST permissions, and safe string parsing. |
+| `security.PasswordHasherTest` | PBKDF2-HMAC-SHA256 hashing | 3 | 3 | 0 | Verifies 600,000 iterations, constant-time comparison, rehash detection, and timing attack mitigation. |
+| `security.ServiceAuthorizationTest` | Service-layer RBAC enforcement | 7 | 7 | 0 | Asserts AccessDeniedException when HOST attempts table management, customer deletion, report viewing, or staff management. |
+| **Total Automated** | | **43** | **43** | **0** | **100% Passing** |
 
 ---
 
@@ -38,6 +43,9 @@ mvn test
 | **13** | Concurrent Booking | Two concurrent app instances submit booking for same table and slot simultaneously. | Exactly one instance succeeds; the second receives friendly conflict alert. | First booker commits; second booker receives `BookingConflictException`. | **PASS** |
 | **14** | Delete Customer/Table in Use | In Customers or Tables tab, attempt to delete an entity that has active reservations. | Deletion blocked with friendly message suggesting to deactivate or cancel instead. | `ReferenceInUseException` caught; friendly guidance dialog displayed. | **PASS** |
 | **15** | Maintenance Table | Set Table T08 status to `MAINTENANCE`. | Table is never offered in Find available tables; displayed in grey in Floor view. | Filtered out from booking search; displayed with hatched grey status in Floor view. | **PASS** |
+| **16** | Role-Based Access Enforcement | Log in as HOST and attempt to manage tables, delete customers, or view reports. | Navigation items hidden in Sidebar; direct invocation of service methods raises `AccessDeniedException`. | Service-layer permission check blocks unauthorized operations with friendly access denied alert. | **PASS** |
+| **17** | Brute-Force Persistent Lockout | Enter 5 incorrect passwords for a staff account, restart the application, and retry. | Account is locked for configured minutes in Oracle DB; lock persists across app restarts. | `AccountLockedException` thrown with live countdown timer; restart does not reset lock. | **PASS** |
+| **18** | Immutable Audit Log Guarantee | Attempt to execute `UPDATE audit_log` or `DELETE FROM audit_log` via SQL*Plus or JDBC. | Trigger `trg_audit_append_only` raises `ORA-20010: audit_log is append-only`. | Statement rejected with ORA-20010; zero records modified or deleted. | **PASS** |
 
 ---
 
