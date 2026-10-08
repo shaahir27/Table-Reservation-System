@@ -268,12 +268,12 @@ All SQL files live in the [sql/](file:///d:/Desktop/project/RTRS/sql) folder:
 - Inserts the default 5 time slots.
 
 ### 7.2. `02_seed.sql`
-- Populates realistic demo data.
-- **Relative Dates:** All reservation dates use `TRUNC(SYSDATE) - 1`, `TRUNC(SYSDATE)`, `TRUNC(SYSDATE) + 1`, etc. This ensures that no matter what date or year the demonstration is run, the demo bookings are always relative to "Today", "Yesterday", and "Tomorrow".
-- Seeds 6 Indian customers with valid 10-digit mobile numbers.
-- Seeds 8 tables across 4 zones (`Indoor`, `Window`, `Outdoor`, `Hall`).
-- Seeds 8 reservations in various states (`CONFIRMED`, `COMPLETED`, `CANCELLED`).
-- **Vital Testing Anchor:** Table `T05` for tomorrow at `07:30 PM` (slot 4) is intentionally left unreserved for immediate live testing!
+- Populates rich, production-grade demo data with clean idempotent teardown (`DELETE FROM reservation`, `restaurant_table`, `customer`).
+- **Relative Dates:** All reservation dates use `TRUNC(SYSDATE) - 6` through `TRUNC(SYSDATE) + 6`. This ensures that no matter what date or year the demonstration is run, the demo bookings are always relative to "Today", "Yesterday", "Tomorrow", and past/future weeks.
+- Seeds **20 Indian customers** with valid 10-digit mobile numbers and realistic email addresses.
+- Seeds **12 restaurant tables** across all 4 zones (`Indoor`, `Window`, `Outdoor`, `Hall`), capacities from 2 to 12 seats (including `T07` in `MAINTENANCE` mode).
+- Seeds **70 reservations** across past history, today's lunch/dinner rush, tomorrow, and future days with varied states (`CONFIRMED`, `COMPLETED`, `CANCELLED`).
+- **Vital Testing Anchor:** Table `T05` for tomorrow at `07:30 PM` (slot 4) is intentionally left unreserved for immediate live testing and the examiner proof!
 
 ### 7.3. `03_drop_all.sql`
 - A clean teardown script that drops all triggers, indexes, tables, and sequences with `CASCADE CONSTRAINTS`.

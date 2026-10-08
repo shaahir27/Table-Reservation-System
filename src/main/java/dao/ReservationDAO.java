@@ -88,7 +88,7 @@ public class ReservationDAO {
                      "WHERE table_id = ? " +
                      "  AND reservation_date = ? " +
                      "  AND slot_id = ? " +
-                     "  AND status IN ('CONFIRMED', 'COMPLETED')";
+                     "  AND status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN;
 
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, tableId);
@@ -255,7 +255,7 @@ public class ReservationDAO {
      */
     public int getTodayCount() {
         String sql = "SELECT COUNT(*) FROM reservation " +
-                     "WHERE reservation_date = TRUNC(SYSDATE) AND status IN ('CONFIRMED','COMPLETED')";
+                     "WHERE reservation_date = TRUNC(SYSDATE) AND status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN;
         try (Connection con = DatabaseConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -324,8 +324,11 @@ public class ReservationDAO {
                 }
             }
         } catch (SQLException e) {
-            // Fallback for Oracle 11g which doesn't support FETCH FIRST
-            return getUpcomingReservationsFallback(limit);
+            // Narrow fallback strictly for Oracle 11g which doesn't support FETCH FIRST (ORA-00933)
+            if (e.getErrorCode() == 933 || (e.getMessage() != null && e.getMessage().contains("ORA-00933"))) {
+                return getUpcomingReservationsFallback(limit);
+            }
+            throw OracleErrorMapper.map(e, "ReservationDAO.getUpcomingReservations");
         }
         return list;
     }
@@ -372,7 +375,7 @@ public class ReservationDAO {
                      "WHERE  r.reservation_date = ? " +
                      "  AND  r.slot_id = ? " +
                      "  AND  r.table_id = ? " +
-                     "  AND  r.status IN ('CONFIRMED', 'COMPLETED')";
+                     "  AND  r.status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN;
 
         try (Connection con = DatabaseConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
@@ -392,7 +395,7 @@ public class ReservationDAO {
 
     private Reservation mapRow(ResultSet rs) throws SQLException {
         Timestamp ts = rs.getTimestamp("created_at");
-        LocalDateTime createdAt = ts != null ? ts.toLocalDateTime() : LocalDateTime.now();
+        LocalDateTime createdAt = ts != null ? ts.toLocalDateTime() : util.DbClock.localDateTime();
 
         return new Reservation(
                 rs.getInt("reservation_id"),
@@ -408,7 +411,7 @@ public class ReservationDAO {
 
     private ReservationDetail mapDetailRow(ResultSet rs) throws SQLException {
         Timestamp ts = rs.getTimestamp("created_at");
-        LocalDateTime createdAt = ts != null ? ts.toLocalDateTime() : LocalDateTime.now();
+        LocalDateTime createdAt = ts != null ? ts.toLocalDateTime() : util.DbClock.localDateTime();
         int resId = rs.getInt("reservation_id");
 
         return new ReservationDetail(

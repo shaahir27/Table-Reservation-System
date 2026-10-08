@@ -45,7 +45,7 @@ public class DateSelector extends JPanel {
         setLayout(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
         setOpaque(false);
 
-        selectedDate = LocalDate.now();
+        selectedDate = util.DbClock.today();
 
         // 1. Quick Chips: Today, Tomorrow, +4 consecutive days
         addDateChip("Today", selectedDate);
@@ -72,8 +72,8 @@ public class DateSelector extends JPanel {
             if (updatingInternal) return;
             Date val = (Date) dateSpinner.getValue();
             LocalDate newDate = Instant.ofEpochMilli(val.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
-            if (newDate.isBefore(LocalDate.now())) {
-                newDate = LocalDate.now();
+            if (newDate.isBefore(util.DbClock.today())) {
+                newDate = util.DbClock.today();
                 dateSpinner.setValue(Date.from(newDate.atStartOfDay(ZoneId.systemDefault()).toInstant()));
             }
             setDate(newDate, false);

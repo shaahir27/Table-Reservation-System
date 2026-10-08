@@ -170,7 +170,7 @@ public class TableDAO implements CrudDAO<RestaurantTable, Integer> {
      * Serializes concurrent bookings of the same table during reservation transactions.
      */
     public void lockTable(Connection con, int tableId) throws SQLException {
-        String sql = "SELECT table_id FROM restaurant_table WHERE table_id = ? FOR UPDATE";
+        String sql = "SELECT table_id FROM restaurant_table WHERE table_id = ? FOR UPDATE WAIT 5";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, tableId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -201,7 +201,7 @@ public class TableDAO implements CrudDAO<RestaurantTable, Integer> {
                      "                   WHERE  r.table_id = t.table_id " +
                      "                   AND    r.reservation_date = ? " +
                      "                   AND    r.slot_id = ? " +
-                     "                   AND    r.status IN ('CONFIRMED','COMPLETED')) " +
+                     "                   AND    r.status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN + ") " +
                      "ORDER  BY t.capacity ASC, t.table_number ASC";
 
         List<RestaurantTable> list = new ArrayList<>();
@@ -235,7 +235,7 @@ public class TableDAO implements CrudDAO<RestaurantTable, Integer> {
                      "FROM   restaurant_table t " +
                      "LEFT   JOIN reservation r " +
                      "       ON  r.table_id = t.table_id AND r.reservation_date = ? AND r.slot_id = ? " +
-                     "       AND r.status IN ('CONFIRMED','COMPLETED') " +
+                     "       AND r.status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN + " " +
                      "WHERE  t.status <> 'INACTIVE' " +
                      "ORDER  BY t.table_number ASC";
 

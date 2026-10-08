@@ -34,7 +34,7 @@ public class Reservation {
     }
 
     public Reservation(int customerId, int tableId, LocalDate reservationDate, int slotId, int guestCount) {
-        this(0, customerId, tableId, reservationDate, slotId, guestCount, ReservationStatus.CONFIRMED, LocalDateTime.now());
+        this(0, customerId, tableId, reservationDate, slotId, guestCount, ReservationStatus.CONFIRMED, util.DbClock.localDateTime());
     }
 
     public int getReservationId() {

@@ -67,4 +67,15 @@ public class TableService {
     public List<String> getDistinctLocations() {
         return tableDAO.getDistinctLocations();
     }
+
+    /**
+     * Returns the maximum seating capacity among active tables in the restaurant (fixes D4).
+     */
+    public int getMaxCapacity() {
+        return tableDAO.getAll().stream()
+                .filter(t -> t.getStatus() != model.TableStatus.INACTIVE)
+                .mapToInt(RestaurantTable::getCapacity)
+                .max()
+                .orElse(10);
+    }
 }

@@ -17,6 +17,7 @@ import model.TableState;
 import model.TableStatus;
 import model.TimeSlot;
 import util.AppLog;
+import util.DbClock;
 import util.OracleErrorMapper;
 import util.ValidationUtil;
 
@@ -71,13 +72,13 @@ public class ReservationService {
         if (date == null) {
             throw new ValidationException("Reservation date is required.");
         }
-        if (date.isBefore(LocalDate.now())) {
+        if (date.isBefore(DbClock.today())) {
             throw new ValidationException("Reservation date cannot be in the past.");
         }
         if (slot == null) {
             throw new ValidationException("Please select a time slot.");
         }
-        if (date.isEqual(LocalDate.now()) && !slot.getStartTime().isAfter(LocalTime.now())) {
+        if (date.isEqual(DbClock.today()) && !slot.getStartTime().isAfter(DbClock.localTime())) {
             throw new ValidationException("Selected time slot for today has already passed or started.");
         }
         if (guests < 1 || guests > 20) {
@@ -206,8 +207,8 @@ public class ReservationService {
         }
 
         Reservation res = opt.get();
-        LocalDate today = LocalDate.now();
-        LocalTime now = LocalTime.now();
+        LocalDate today = DbClock.today();
+        LocalTime now = DbClock.localTime();
 
         TimeSlot slot = getTimeSlots().stream()
                 .filter(s -> s.getSlotId() == res.getSlotId())
@@ -258,8 +259,8 @@ public class ReservationService {
         int upcomingCount = reservationDAO.getUpcomingCount();
         int cancelledCount = reservationDAO.getCancelledCount();
 
-        LocalDate today = LocalDate.now();
-        LocalTime now = LocalTime.now();
+        LocalDate today = DbClock.today();
+        LocalTime now = DbClock.localTime();
         List<TimeSlot> slots = getTimeSlots();
         TimeSlot targetSlot = null;
         LocalDate targetDate = today;

@@ -91,7 +91,7 @@ public class ReportsPanel extends BasePanel {
         // Default toDate = today, fromDate = 7 days ago
         Date now = new Date();
         toDateSpinner.setValue(now);
-        Date weekAgo = Date.from(LocalDate.now().minusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date weekAgo = Date.from(util.DbClock.today().minusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant());
         fromDateSpinner.setValue(weekAgo);
 
         // Table setup

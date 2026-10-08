@@ -133,6 +133,13 @@ public class NewReservationPanel extends BasePanel {
                     buildSlotButtons(slots);
                     buildLocationChips(locations);
                     updateSlotButtonsState();
+
+                    int maxCap = tableService.getMaxCapacity();
+                    SpinnerNumberModel model = (SpinnerNumberModel) guestSpinner.getModel();
+                    model.setMaximum(maxCap);
+                    if (((Integer) guestSpinner.getValue()) > maxCap) {
+                        guestSpinner.setValue(maxCap);
+                    }
                 },
                 error -> AppLog.error("Error loading slots/locations: " + error.getMessage(), error)
         );
@@ -379,8 +386,8 @@ public class NewReservationPanel extends BasePanel {
 
     private void updateSlotButtonsState() {
         LocalDate selectedDate = dateSelector.getDate();
-        boolean isToday = selectedDate.isEqual(LocalDate.now());
-        LocalTime now = LocalTime.now();
+        boolean isToday = selectedDate.isEqual(util.DbClock.today());
+        LocalTime now = util.DbClock.localTime();
 
         boolean selectedIsDisabled = false;
         SlotToggleButton firstEnabled = null;
@@ -438,7 +445,12 @@ public class NewReservationPanel extends BasePanel {
                     step3Card.setVisible(true);
 
                     if (availabilities.isEmpty()) {
-                        Toast.info(SwingUtilities.getWindowAncestor(this), "No single table can seat " + guests + " guests for this slot. Try another slot or party size.");
+                        int maxCap = tableService.getMaxCapacity();
+                        if (guests > maxCap) {
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table seats " + guests + " guests (max capacity is " + maxCap + "). Table combination will be available in an update.");
+                        } else {
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table can seat " + guests + " guests for this slot. Try another slot or party size.");
+                        }
                     }
 
                     applyLocationFilterToGrid();
@@ -569,7 +581,7 @@ public class NewReservationPanel extends BasePanel {
     private void resetForm() {
         customerSelector.clearFilter();
         guestSpinner.setValue(2);
-        dateSelector.setDate(LocalDate.now());
+        dateSelector.setDate(util.DbClock.today());
         updateSlotButtonsState();
         clearStep3();
     }

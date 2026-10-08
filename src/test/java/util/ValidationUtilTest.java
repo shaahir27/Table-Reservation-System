@@ -43,6 +43,16 @@ class ValidationUtilTest {
     }
 
     @Test
+    @DisplayName("Valid customer with Unicode/accented characters in name passes validation")
+    void testValidateCustomer_UnicodeNames() {
+        assertDoesNotThrow(() -> ValidationUtil.validateCustomer(new Customer("José Silva", "9876543210", "")));
+        assertDoesNotThrow(() -> ValidationUtil.validateCustomer(new Customer("Müller Hans", "9876543210", "")));
+        assertDoesNotThrow(() -> ValidationUtil.validateCustomer(new Customer("François Dupont", "9876543210", "")));
+        assertDoesNotThrow(() -> ValidationUtil.validateCustomer(new Customer("Renée O'Connor", "9876543210", "")));
+        assertDoesNotThrow(() -> ValidationUtil.validateCustomer(new Customer("Jean-Luc Picard", "9876543210", "")));
+    }
+
+    @Test
     @DisplayName("Customer validation fails on invalid name, phone, and email")
     void testValidateCustomer_InvalidFields() {
         Customer customer = new Customer("A", "12345", "invalid-email");

@@ -139,10 +139,9 @@ Because every determinant in every table is a superkey, the database is in **BCN
    Rather than relying only on Java application checks, Oracle enforces concurrency safety via the function-based unique index:
    ```sql
    CREATE UNIQUE INDEX uq_active_booking ON reservation (
-       table_id,
-       reservation_date,
-       slot_id,
-       CASE WHEN status IN ('CONFIRMED', 'COMPLETED') THEN 1 ELSE NULL END
+       CASE WHEN status IN ('CONFIRMED', 'COMPLETED') THEN table_id         END,
+       CASE WHEN status IN ('CONFIRMED', 'COMPLETED') THEN reservation_date END,
+       CASE WHEN status IN ('CONFIRMED', 'COMPLETED') THEN slot_id          END
    );
    ```
-   Because Oracle indices do not index all-null entries, `CANCELLED` bookings evaluate to `NULL` and free the slot immediately for rebooking, while preserving full audit history.
+   Because Oracle indices do not index all-null entries, `CANCELLED` bookings produce `NULL` for all three expressions and free the slot immediately for rebooking, while preserving full audit history.

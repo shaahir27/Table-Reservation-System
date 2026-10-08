@@ -218,6 +218,7 @@ public class MainFrame extends JFrame {
         Ui.async(
                 () -> {
                     DatabaseConnection.testConnection();
+                    util.DbClock.syncWithDatabase();
                     return true;
                 },
                 success -> {

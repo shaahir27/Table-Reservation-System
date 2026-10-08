@@ -39,7 +39,7 @@ public abstract class BasePanel extends JPanel {
         titleLabel.setFont(Theme.FONT_TITLE);
         titleLabel.setForeground(Theme.TEXT_PRIMARY);
 
-        dateLabel = new JLabel(LocalDate.now().format(DATE_FMT));
+        dateLabel = new JLabel(util.DbClock.today().format(DATE_FMT));
         dateLabel.setFont(Theme.FONT_BODY);
         dateLabel.setForeground(Theme.TEXT_MUTED);
 
@@ -58,6 +58,7 @@ public abstract class BasePanel extends JPanel {
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentShown(ComponentEvent e) {
+                dateLabel.setText(util.DbClock.today().format(DATE_FMT));
                 onShown();
             }
         });

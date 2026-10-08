@@ -43,13 +43,25 @@ public class OracleErrorMapper {
             case 20002: // Trigger rule: table is not AVAILABLE
                 return new ValidationException("The selected table is currently not available for booking.");
 
+            case 20003: // Trigger rule: illegal reservation status transition
+                return new ValidationException("Illegal reservation status change: " + e.getMessage());
+
+            case 20010: // Trigger rule: audit_log is append-only
+                return new ValidationException("Audit log is append-only and cannot be updated or deleted.");
+
+            case 30006: // ORA-30006: Resource busy; acquire with WAIT timeout expired
+                return new BookingConflictException("The requested table is currently locked by another booking operation. Please retry in a few moments.");
+
             case 1017:  // ORA-01017: Invalid username/password
+            case 1045:  // ORA-01045: User lacks CREATE SESSION privilege
             case 12170: // ORA-12170: Connect timeout
             case 12514: // ORA-12514: TNS listener cannot resolve service name
             case 12541: // ORA-12541: TNS: no listener
             case 17002: // Vendor error code for I/O Exception / connection refused
+            case 28000: // ORA-28000: The account is locked
+            case 28001: // ORA-28001: The password has expired
                 return new DatabaseUnavailableException(
-                        "Cannot connect to the Oracle database. Please verify that Oracle is running and your connection settings in config.properties are correct.",
+                        "Cannot connect to the Oracle database (" + (errorCode == 28000 ? "account is locked" : errorCode == 28001 ? "password has expired" : "listener/service unavailable") + "). Please verify Oracle service and configuration.",
                         e
                 );
 

@@ -24,7 +24,7 @@ public class ReportDAO {
      * Report 1: Today's reservations ordered by seating time and table number.
      */
     public ReportResult getTodaysReservations() {
-        String title = "Today's Reservations (" + LocalDate.now() + ")";
+        String title = "Today's Reservations (" + util.DbClock.today() + ")";
         List<String> columns = Arrays.asList(
                 "ID", "Customer", "Phone", "Table", "Time Slot", "Guests", "Status", "Booked At"
         );
@@ -93,7 +93,7 @@ public class ReportDAO {
                      "       COUNT(r.reservation_id) AS total_bookings " +
                      "FROM   restaurant_table t " +
                      "LEFT   JOIN reservation r " +
-                     "       ON r.table_id = t.table_id AND r.status IN ('CONFIRMED', 'COMPLETED') " +
+                     "       ON r.table_id = t.table_id AND r.status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN + " " +
                      "GROUP  BY t.table_number, t.capacity, t.location " +
                      "ORDER  BY total_bookings DESC, t.table_number ASC";
 
@@ -111,7 +111,7 @@ public class ReportDAO {
                      "       COUNT(r.reservation_id) AS total_bookings " +
                      "FROM   time_slot s " +
                      "LEFT   JOIN reservation r " +
-                     "       ON r.slot_id = s.slot_id AND r.status IN ('CONFIRMED', 'COMPLETED') " +
+                     "       ON r.slot_id = s.slot_id AND r.status IN " + SqlFragments.ACTIVE_BOOKING_STATUSES_IN + " " +
                      "GROUP  BY s.slot_label, s.start_time, s.end_time " +
                      "ORDER  BY s.start_time ASC";
 

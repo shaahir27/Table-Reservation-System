@@ -353,7 +353,7 @@ public class ReservationsPanel extends BasePanel {
         // Mark Completed enabled only for CONFIRMED whose slot has begun or is in the past
         boolean eligibleForCompletion = false;
         if (isConfirmed) {
-            LocalDate today = LocalDate.now();
+            LocalDate today = util.DbClock.today();
             if (detail.getReservationDate().isBefore(today)) {
                 eligibleForCompletion = true;
             } else if (detail.getReservationDate().isEqual(today)) {
@@ -372,7 +372,7 @@ public class ReservationsPanel extends BasePanel {
             for (TimeSlot s : slots) {
                 if (slotLabel.contains(s.getStartTime().format(DateTimeFormatter.ofPattern("hh:mm a"))) ||
                     slotLabel.equalsIgnoreCase(s.getLabel())) {
-                    return !s.getStartTime().isAfter(LocalTime.now());
+                    return !s.getStartTime().isAfter(util.DbClock.localTime());
                 }
             }
         } catch (Exception ignored) {
