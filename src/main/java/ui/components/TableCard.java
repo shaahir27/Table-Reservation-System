@@ -31,6 +31,7 @@ public class TableCard extends JPanel {
     private final TableAvailability availability;
     private boolean isSelected = false;
     private boolean isHover = false;
+    private final ui.anim.Anim.Value hoverAmt = new ui.anim.Anim.Value(0, this::repaint);
     private Consumer<TableCard> onClick;
 
     public TableCard(TableAvailability availability) {
@@ -51,12 +52,14 @@ public class TableCard extends JPanel {
                 @Override
                 public void mouseEntered(MouseEvent e) {
                     isHover = true;
+                    hoverAmt.animateTo(1, 140);
                     repaint();
                 }
 
                 @Override
                 public void mouseExited(MouseEvent e) {
                     isHover = false;
+                    hoverAmt.animateTo(0, 200);
                     repaint();
                 }
 
@@ -105,26 +108,23 @@ public class TableCard extends JPanel {
 
         // 1. Background fill
         if (state == TableState.MAINTENANCE) {
-            g2.setColor(new Color(240, 240, 240));
+            g2.setColor(Theme.NEUTRAL_TINT);
             g2.fillRoundRect(0, 0, w, h, ARC, ARC);
 
             // Paint hatched diagonal lines
-            g2.setColor(new Color(210, 210, 210));
+            g2.setColor(Theme.CARD_BORDER);
             g2.setStroke(new BasicStroke(1.5f));
             for (int d = -h; d < w + h; d += 14) {
                 g2.drawLine(d, 0, d + h, h);
             }
         } else if (state == TableState.RESERVED) {
-            g2.setColor(Color.decode("#EFECE6"));
+            g2.setColor(Theme.NEUTRAL_TINT);
             g2.fillRoundRect(0, 0, w, h, ARC, ARC);
         } else if (isSelected) {
-            g2.setColor(new Color(200, 150, 62, 30)); // Gold tint
-            g2.fillRoundRect(0, 0, w, h, ARC, ARC);
-        } else if (isHover) {
-            g2.setColor(new Color(250, 248, 244));
+            g2.setColor(Theme.GOLD_TINT_STRONG);
             g2.fillRoundRect(0, 0, w, h, ARC, ARC);
         } else {
-            g2.setColor(Theme.CARD_BG);
+            g2.setColor(Theme.mix(Theme.CARD_BG, Theme.GOLD_TINT, hoverAmt.get()));
             g2.fillRoundRect(0, 0, w, h, ARC, ARC);
         }
 

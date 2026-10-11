@@ -8,7 +8,15 @@ import model.TimeSlot;
 import service.CustomerService;
 import service.ReservationService;
 import service.TableService;
+import service.AvailabilityService;
 import ui.components.AddCustomerDialog;
+import ui.components.AppButton;
+import ui.components.AvailabilityMatrixPanel;
+import ui.components.Card;
+import ui.components.ChipRow;
+import ui.components.ChipToggle;
+import ui.components.ConfirmDialog;
+import ui.components.Form;
 import ui.components.BookingConfirmedDialog;
 import ui.components.DateSelector;
 import ui.components.SearchableComboBox;
@@ -23,7 +31,6 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -31,13 +38,7 @@ import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -65,12 +66,16 @@ public class NewReservationPanel extends BasePanel {
     private final DateSelector dateSelector = new DateSelector();
     private final ButtonGroup slotButtonGroup = new ButtonGroup();
     private final List<SlotToggleButton> slotButtons = new ArrayList<>();
-    private final JPanel slotButtonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+    private final JPanel slotButtonsPanel = new ChipRow(Theme.SPACE_8);
     private final JSpinner guestSpinner = new JSpinner(new SpinnerNumberModel(2, 1, 20, 1));
     private final ButtonGroup locationGroup = new ButtonGroup();
-    private final JPanel locationChipsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+    private final JPanel locationChipsPanel = new ChipRow(Theme.SPACE_8);
     private String selectedLocationFilter = "Any";
     private JButton findTablesBtn;
+    private final AvailabilityService availabilityService = new AvailabilityService();
+    private final AvailabilityMatrixPanel matrixPanel = new AvailabilityMatrixPanel();
+    private final JPanel matrixContainer = new JPanel(new BorderLayout());
+    private JButton matrixToggleBtn;
 
     // Step 3: Choose a Table
     private final JPanel step3Card;
@@ -80,6 +85,12 @@ public class NewReservationPanel extends BasePanel {
 
     // State
     private List<TableAvailability> currentSearchResults = new ArrayList<>();
+    private java.util.function.Consumer<String> screenNavigator;
+
+    /** Lets this screen send the user to another screen (used by the fully-booked -> Service Board hand-off). */
+    public void setScreenNavigator(java.util.function.Consumer<String> navigator) {
+        this.screenNavigator = navigator;
+    }
     private RestaurantTable selectedTable = null;
 
     public NewReservationPanel() {
@@ -117,25 +128,37 @@ public class NewReservationPanel extends BasePanel {
                 error -> AppLog.error("Error loading customers: " + error.getMessage(), error)
         );
 
-        // Load time slots and location chips
-        Ui.async(
-                () -> {
-                    List<TimeSlot> slots = reservationService.getTimeSlots();
-                    List<String> locations = tableService.getDistinctLocations();
-                    return new Object[]{slots, locations};
-                },
-                result -> {
-                    @SuppressWarnings("unchecked")
-                    List<TimeSlot> slots = (List<TimeSlot>) result[0];
-                    @SuppressWarnings("unchecked")
-                    List<String> locations = (List<String>) result[1];
+        // Load time slots and location chips if not already initialized
+        if (slotButtons.isEmpty()) {
+            Ui.async(
+                    () -> {
+                        List<TimeSlot> slots = reservationService.getTimeSlots();
+                        List<String> locations = tableService.getDistinctLocations();
+                        int maxCapacity = tableService.getMaxCapacity();
+                        return new Object[]{slots, locations, maxCapacity};
+                    },
+                    result -> {
+                        @SuppressWarnings("unchecked")
+                        List<TimeSlot> slots = (List<TimeSlot>) result[0];
+                        @SuppressWarnings("unchecked")
+                        List<String> locations = (List<String>) result[1];
 
-                    buildSlotButtons(slots);
-                    buildLocationChips(locations);
-                    updateSlotButtonsState();
-                },
-                error -> AppLog.error("Error loading slots/locations: " + error.getMessage(), error)
-        );
+                        buildSlotButtons(slots);
+                        buildLocationChips(locations);
+                        updateSlotButtonsState();
+
+                        int maxCap = (Integer) result[2];
+                        SpinnerNumberModel model = (SpinnerNumberModel) guestSpinner.getModel();
+                        model.setMaximum(maxCap);
+                        if (((Integer) guestSpinner.getValue()) > maxCap) {
+                            guestSpinner.setValue(maxCap);
+                        }
+                    },
+                    error -> AppLog.error("Error loading slots/locations: " + error.getMessage(), error)
+            );
+        } else {
+            updateSlotButtonsState();
+        }
     }
 
     private void initLayout() {
@@ -156,25 +179,29 @@ public class NewReservationPanel extends BasePanel {
         step1Card.add(step1Title);
         step1Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
-        JPanel step1Body = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_16, 0));
+        JPanel step1Body = new JPanel(new java.awt.GridBagLayout());
         step1Body.setOpaque(false);
         step1Body.setAlignmentX(0.0f);
 
-        customerSelector.setPreferredSize(new Dimension(360, 84));
-        step1Body.add(customerSelector);
+        customerSelector.setPreferredSize(new Dimension(460, 98));
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.gridx = 0;
+        gc.gridy = 0;
+        gc.weightx = 0;
+        gc.anchor = java.awt.GridBagConstraints.NORTHWEST;
+        step1Body.add(customerSelector, gc);
 
-        JButton newCustomerBtn = new JButton("+ New Customer");
-        newCustomerBtn.setFont(Theme.FONT_BODY_BOLD);
-        newCustomerBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        newCustomerBtn.setPreferredSize(new Dimension(145, 38));
+        JButton newCustomerBtn = AppButton.secondary("+ New Customer");
         newCustomerBtn.addActionListener(e -> openAddCustomerDialog());
+        gc.gridx = 1;
+        gc.insets = new java.awt.Insets(0, Theme.SPACE_12, 0, 0);
+        step1Body.add(newCustomerBtn, gc);
 
-        JPanel btnWrapper = new JPanel();
-        btnWrapper.setLayout(new BoxLayout(btnWrapper, BoxLayout.Y_AXIS));
-        btnWrapper.setOpaque(false);
-        btnWrapper.add(Box.createVerticalStrut(44));
-        btnWrapper.add(newCustomerBtn);
-        step1Body.add(btnWrapper);
+        gc.gridx = 2;
+        gc.weightx = 1;
+        gc.insets = new java.awt.Insets(0, 0, 0, 0);
+        step1Body.add(javax.swing.Box.createHorizontalGlue(), gc);
+        step1Body.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
 
         step1Card.add(step1Body);
         scrollContent.add(step1Card);
@@ -194,10 +221,7 @@ public class NewReservationPanel extends BasePanel {
         step2Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Date selection
-        JLabel dateLabel = new JLabel("Select Date:");
-        dateLabel.setFont(Theme.FONT_SMALL_BOLD);
-        dateLabel.setForeground(Theme.TEXT_MUTED);
-        dateLabel.setAlignmentX(0.0f);
+        JLabel dateLabel = Form.label("Date");
         step2Card.add(dateLabel);
         step2Card.add(Box.createVerticalStrut(Theme.SPACE_8));
 
@@ -210,10 +234,7 @@ public class NewReservationPanel extends BasePanel {
         step2Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Slot selection
-        JLabel slotLabel = new JLabel("Time Slot (90-Minute Seating):");
-        slotLabel.setFont(Theme.FONT_SMALL_BOLD);
-        slotLabel.setForeground(Theme.TEXT_MUTED);
-        slotLabel.setAlignmentX(0.0f);
+        JLabel slotLabel = Form.label("Time slot  ·  90-minute seating");
         step2Card.add(slotLabel);
         step2Card.add(Box.createVerticalStrut(Theme.SPACE_8));
 
@@ -222,30 +243,87 @@ public class NewReservationPanel extends BasePanel {
         step2Card.add(slotButtonsPanel);
         step2Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
-        // Guests & Location row
-        JPanel guestsAndLocationRow = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_24, 0));
+        // Guests & Section row: two labelled columns, flush left
+        JPanel guestsAndLocationRow = new JPanel();
+        guestsAndLocationRow.setLayout(new BoxLayout(guestsAndLocationRow, BoxLayout.X_AXIS));
         guestsAndLocationRow.setOpaque(false);
         guestsAndLocationRow.setAlignmentX(0.0f);
 
-        // Guest count
-        JPanel guestsGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        JPanel guestsGroup = new JPanel();
+        guestsGroup.setLayout(new BoxLayout(guestsGroup, BoxLayout.Y_AXIS));
         guestsGroup.setOpaque(false);
-        JLabel guestsLbl = new JLabel("Guests:");
-        guestsLbl.setFont(Theme.FONT_SMALL_BOLD);
-        guestsLbl.setForeground(Theme.TEXT_MUTED);
-        guestSpinner.setPreferredSize(new Dimension(80, 36));
+        JLabel guestsLbl = Form.label("Guests");
+        Form.input(guestSpinner, 110);
         guestSpinner.setFont(Theme.FONT_BODY_BOLD);
-        guestSpinner.addChangeListener(e -> clearStep3());
+        guestSpinner.addChangeListener(e -> {
+            clearStep3();
+            if (matrixContainer.isVisible()) {
+                refreshMatrix();
+            }
+        });
         guestsGroup.add(guestsLbl);
+        guestsGroup.add(Box.createVerticalStrut(Theme.SPACE_8));
         guestsGroup.add(guestSpinner);
+        guestSpinner.setAlignmentX(0.0f);
         guestsAndLocationRow.add(guestsGroup);
+        guestsAndLocationRow.add(Box.createHorizontalStrut(Theme.SPACE_32));
 
-        // Location chips
+        JPanel locationGroupPanel = new JPanel();
+        locationGroupPanel.setLayout(new BoxLayout(locationGroupPanel, BoxLayout.Y_AXIS));
+        locationGroupPanel.setOpaque(false);
+        JLabel sectionLbl = Form.label("Preferred section");
         locationChipsPanel.setOpaque(false);
-        guestsAndLocationRow.add(locationChipsPanel);
+        locationChipsPanel.setAlignmentX(0.0f);
+        locationGroupPanel.add(sectionLbl);
+        locationGroupPanel.add(Box.createVerticalStrut(Theme.SPACE_8 + 3));
+        locationGroupPanel.add(locationChipsPanel);
+        guestsAndLocationRow.add(locationGroupPanel);
+        guestsAndLocationRow.add(Box.createHorizontalGlue());
 
         step2Card.add(guestsAndLocationRow);
-        step2Card.add(Box.createVerticalStrut(Theme.SPACE_24));
+        step2Card.add(Box.createVerticalStrut(Theme.SPACE_20));
+
+        // One-Glance Availability Matrix Toggle & Container
+        matrixToggleBtn = AppButton.secondary("Show 7-day availability").compact();
+        matrixToggleBtn.setAlignmentX(0.0f);
+        matrixToggleBtn.addActionListener(e -> {
+            boolean show = !matrixContainer.isVisible();
+            matrixContainer.setVisible(show);
+            matrixToggleBtn.setText(show ? "Hide availability" : "Show 7-day availability");
+            if (show) {
+                refreshMatrix();
+            }
+        });
+        step2Card.add(matrixToggleBtn);
+        step2Card.add(Box.createVerticalStrut(Theme.SPACE_12));
+
+        matrixContainer.setOpaque(false);
+        matrixContainer.setVisible(false);
+        matrixContainer.setAlignmentX(0.0f);
+        matrixContainer.add(matrixPanel, BorderLayout.CENTER);
+
+        matrixPanel.setOnCellSelected((date, slot) -> {
+            dateSelector.setDate(date);
+            selectSlot(slot);
+            onFindTables();
+        });
+
+        matrixPanel.setOnWaitlistRequested((date, slot) -> {
+            boolean open = ConfirmDialog.ask(
+                    SwingUtilities.getWindowAncestor(this),
+                    "Slot Fully Booked",
+                    "Slot " + slot.getLabel() + " on " + date.format(DATE_FMT) + " is fully booked.\nOpen the Service Board to add this party to the waitlist?",
+                    "Open Service Board"
+            );
+            dateSelector.setDate(date);
+            selectSlot(slot);
+            if (open && screenNavigator != null) {
+                screenNavigator.accept("SERVICE_BOARD");
+            }
+        });
+
+        step2Card.add(matrixContainer);
+        step2Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Find available tables button
         findTablesBtn = createPrimaryButton("Find Available Tables");
@@ -345,10 +423,6 @@ public class NewReservationPanel extends BasePanel {
         locationChipsPanel.removeAll();
         locationGroup.clearSelection();
 
-        JLabel locLabel = new JLabel("Section:");
-        locLabel.setFont(Theme.FONT_SMALL_BOLD);
-        locLabel.setForeground(Theme.TEXT_MUTED);
-        locationChipsPanel.add(locLabel);
 
         List<String> allLocs = new ArrayList<>();
         allLocs.add("Any");
@@ -370,6 +444,9 @@ public class NewReservationPanel extends BasePanel {
             chip.addActionListener(e -> {
                 selectedLocationFilter = loc;
                 applyLocationFilterToGrid();
+                if (matrixContainer.isVisible()) {
+                    refreshMatrix();
+                }
             });
         }
 
@@ -377,10 +454,30 @@ public class NewReservationPanel extends BasePanel {
         locationChipsPanel.repaint();
     }
 
+    private void selectSlot(TimeSlot slot) {
+        if (slot == null) return;
+        for (SlotToggleButton btn : slotButtons) {
+            if (btn.slot != null && btn.slot.getSlotId() == slot.getSlotId()) {
+                btn.setSelected(true);
+                break;
+            }
+        }
+    }
+
+    private void refreshMatrix() {
+        int guests = (Integer) guestSpinner.getValue();
+        LocalDate startDate = dateSelector.getDate() != null ? dateSelector.getDate() : util.DbClock.today();
+        Ui.async(
+                () -> availabilityService.getMatrix(startDate, 7, guests, selectedLocationFilter),
+                grid -> matrixPanel.setGrid(grid),
+                err -> AppLog.warning("Matrix load error: " + err.getMessage())
+        );
+    }
+
     private void updateSlotButtonsState() {
         LocalDate selectedDate = dateSelector.getDate();
-        boolean isToday = selectedDate.isEqual(LocalDate.now());
-        LocalTime now = LocalTime.now();
+        boolean isToday = selectedDate.isEqual(util.DbClock.today());
+        LocalTime now = util.DbClock.localTime();
 
         boolean selectedIsDisabled = false;
         SlotToggleButton firstEnabled = null;
@@ -429,8 +526,14 @@ public class NewReservationPanel extends BasePanel {
         findTablesBtn.setText("Searching available tables...");
 
         Ui.async(
-                () -> reservationService.findAvailableTables(date, slot, guests),
-                availabilities -> {
+                () -> {
+                    List<TableAvailability> found = reservationService.findAvailableTables(date, slot, guests);
+                    int maxCapacity = found.isEmpty() ? tableService.getMaxCapacity() : 0;
+                    return new Object[]{found, maxCapacity};
+                },
+                payload -> {
+                    @SuppressWarnings("unchecked")
+                    List<TableAvailability> availabilities = (List<TableAvailability>) payload[0];
                     findTablesBtn.setEnabled(true);
                     findTablesBtn.setText("Find Available Tables");
 
@@ -438,7 +541,12 @@ public class NewReservationPanel extends BasePanel {
                     step3Card.setVisible(true);
 
                     if (availabilities.isEmpty()) {
-                        Toast.info(SwingUtilities.getWindowAncestor(this), "No single table can seat " + guests + " guests for this slot. Try another slot or party size.");
+                        int maxCap = (Integer) payload[1];
+                        if (guests > maxCap) {
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table seats " + guests + " guests (max capacity is " + maxCap + "). Table combination will be available in an update.");
+                        } else {
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table can seat " + guests + " guests for this slot. Try another slot or party size.");
+                        }
                     }
 
                     applyLocationFilterToGrid();
@@ -540,11 +648,10 @@ public class NewReservationPanel extends BasePanel {
 
                     if (error instanceof BookingConflictException) {
                         // Conflict handling: exact message, mark table booked in grid, preserve inputs
-                        JOptionPane.showMessageDialog(
-                                this,
-                                error.getMessage(),
+                        ConfirmDialog.warning(
+                                SwingUtilities.getWindowAncestor(this),
                                 "Reservation Conflict",
-                                JOptionPane.WARNING_MESSAGE
+                                error.getMessage()
                         );
                         tableGridPanel.markTableBooked(chosenTable.getTableNumber());
                     } else {
@@ -569,126 +676,38 @@ public class NewReservationPanel extends BasePanel {
     private void resetForm() {
         customerSelector.clearFilter();
         guestSpinner.setValue(2);
-        dateSelector.setDate(LocalDate.now());
+        dateSelector.setDate(util.DbClock.today());
         updateSlotButtonsState();
         clearStep3();
     }
 
     private JPanel createCardPanel() {
-        JPanel card = new JPanel() {
+        return new Card(Theme.SPACE_24) {
             @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
-                g2.setColor(Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
-                g2.dispose();
+            public Dimension getMaximumSize() {
+                return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
             }
         };
-        card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_24, Theme.SPACE_24, Theme.SPACE_24, Theme.SPACE_24));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-        return card;
     }
 
     private JButton createPrimaryButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isEnabled() ? (getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD) : Theme.CARD_BORDER);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(Theme.FONT_BODY_BOLD);
-        btn.setForeground(Color.WHITE);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(190, 40));
-        return btn;
+        return AppButton.primary(text);
     }
 
     private JToggleButton createFilterChip(String label) {
-        JToggleButton chip = new JToggleButton(label) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                if (isSelected()) {
-                    g2.setColor(Theme.SIDEBAR_BG);
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
-                    setForeground(Color.WHITE);
-                } else {
-                    g2.setColor(Theme.CARD_BG);
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
-                    g2.setColor(Theme.CARD_BORDER);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
-                    setForeground(Theme.TEXT_PRIMARY);
-                }
-
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        chip.setFont(Theme.FONT_SMALL);
-        chip.setFocusPainted(false);
-        chip.setBorderPainted(false);
-        chip.setContentAreaFilled(false);
-        chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        chip.setPreferredSize(new Dimension(78, 32));
-        return chip;
+        return new ChipToggle(label, ChipToggle.Style.DARK).minWidth(78);
     }
 
     /**
      * Custom toggle button representing a time slot.
      */
-    private static class SlotToggleButton extends JToggleButton {
+    private static class SlotToggleButton extends ChipToggle {
         private final TimeSlot slot;
 
         public SlotToggleButton(TimeSlot slot) {
-            super(slot.getLabel());
+            super(slot.getLabel(), ChipToggle.Style.GOLD);
             this.slot = slot;
-            setFont(Theme.FONT_BODY);
-            setFocusPainted(false);
-            setBorderPainted(false);
-            setContentAreaFilled(false);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setPreferredSize(new Dimension(100, 36));
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            if (!isEnabled()) {
-                g2.setColor(new Color(240, 240, 240));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-                setForeground(Theme.TEXT_MUTED);
-            } else if (isSelected()) {
-                g2.setColor(Theme.ACCENT_GOLD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-                setForeground(Color.WHITE);
-                setFont(Theme.FONT_BODY_BOLD);
-            } else {
-                g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-                g2.setColor(getModel().isRollover() ? Theme.ACCENT_GOLD : Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-                setForeground(Theme.TEXT_PRIMARY);
-                setFont(Theme.FONT_BODY);
-            }
-
-            g2.dispose();
-            super.paintComponent(g);
+            minWidth(100);
         }
     }
 }

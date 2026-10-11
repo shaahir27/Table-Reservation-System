@@ -7,15 +7,33 @@ public class TableAvailability {
     private RestaurantTable table;
     private TableState state;
     private boolean recommended;
+    private ReservationDetail activeReservation;
 
     public TableAvailability() {
         this.state = TableState.AVAILABLE;
     }
 
+    public TableAvailability(RestaurantTable table, TableState state) {
+        this(table, state, false, null);
+    }
+
     public TableAvailability(RestaurantTable table, TableState state, boolean recommended) {
+        this(table, state, recommended, null);
+    }
+
+    public TableAvailability(RestaurantTable table, TableState state, boolean recommended, ReservationDetail activeReservation) {
         this.table = table;
         this.state = state;
         this.recommended = recommended;
+        this.activeReservation = activeReservation;
+    }
+
+    public ReservationDetail getActiveReservation() {
+        return activeReservation;
+    }
+
+    public void setActiveReservation(ReservationDetail activeReservation) {
+        this.activeReservation = activeReservation;
     }
 
     public RestaurantTable getTable() {

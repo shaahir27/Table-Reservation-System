@@ -96,31 +96,11 @@ public class BookingConfirmedDialog extends JDialog {
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, Theme.SPACE_16, 0));
         buttonRow.setOpaque(false);
 
-        JButton doneBtn = new JButton("Done");
-        doneBtn.setFont(Theme.FONT_BODY);
-        doneBtn.setPreferredSize(new Dimension(110, 38));
-        doneBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton doneBtn = AppButton.secondary("Done");
         doneBtn.addActionListener(e -> dispose());
         buttonRow.add(doneBtn);
 
-        JButton bookAnotherBtn = new JButton("Book another") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        bookAnotherBtn.setFont(Theme.FONT_BODY_BOLD);
-        bookAnotherBtn.setForeground(Color.WHITE);
-        bookAnotherBtn.setContentAreaFilled(false);
-        bookAnotherBtn.setBorderPainted(false);
-        bookAnotherBtn.setFocusPainted(false);
-        bookAnotherBtn.setPreferredSize(new Dimension(140, 38));
-        bookAnotherBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton bookAnotherBtn = AppButton.primary("Book another");
         bookAnotherBtn.addActionListener(e -> {
             dispose();
             if (onBookAnother != null) {
@@ -134,6 +114,19 @@ public class BookingConfirmedDialog extends JDialog {
 
         pack();
         setLocationRelativeTo(owner);
+        if (isUndecorated()) {
+            try {
+                setOpacity(0f);
+                ui.anim.Anim.run(240, ui.anim.Anim.EASE_OUT, p -> {
+                    try {
+                        setOpacity((float) Math.max(0, Math.min(1, p)));
+                    } catch (Exception ignored) {
+                    }
+                });
+            } catch (Exception ignored) {
+                // translucency unsupported: show immediately
+            }
+        }
 
         // Escape key to close
         getRootPane().registerKeyboardAction(

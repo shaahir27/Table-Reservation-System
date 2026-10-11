@@ -12,6 +12,7 @@ public class DashboardStats {
     private String nextSlotLabel;
     private int upcomingCount;
     private int cancelledCount;
+    private int recoveredCoversCount;
     private List<ReservationDetail> upcoming;
 
     public DashboardStats() {
@@ -20,11 +21,17 @@ public class DashboardStats {
 
     public DashboardStats(int todayCount, int freeTablesNextSlot, String nextSlotLabel, 
                           int upcomingCount, int cancelledCount, List<ReservationDetail> upcoming) {
+        this(todayCount, freeTablesNextSlot, nextSlotLabel, upcomingCount, cancelledCount, 0, upcoming);
+    }
+
+    public DashboardStats(int todayCount, int freeTablesNextSlot, String nextSlotLabel, 
+                          int upcomingCount, int cancelledCount, int recoveredCoversCount, List<ReservationDetail> upcoming) {
         this.todayCount = todayCount;
         this.freeTablesNextSlot = freeTablesNextSlot;
         this.nextSlotLabel = nextSlotLabel;
         this.upcomingCount = upcomingCount;
         this.cancelledCount = cancelledCount;
+        this.recoveredCoversCount = recoveredCoversCount;
         this.upcoming = upcoming != null ? upcoming : Collections.emptyList();
     }
 
@@ -66,6 +73,14 @@ public class DashboardStats {
 
     public void setCancelledCount(int cancelledCount) {
         this.cancelledCount = cancelledCount;
+    }
+
+    public int getRecoveredCoversCount() {
+        return recoveredCoversCount;
+    }
+
+    public void setRecoveredCoversCount(int recoveredCoversCount) {
+        this.recoveredCoversCount = recoveredCoversCount;
     }
 
     public List<ReservationDetail> getUpcoming() {

@@ -2,20 +2,11 @@ package ui.components;
 
 import ui.Theme;
 
-import javax.swing.Box;
 import javax.swing.ButtonGroup;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
-import javax.swing.JToggleButton;
 import javax.swing.SpinnerDateModel;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -41,18 +32,45 @@ public class DateSelector extends JPanel {
     private Consumer<LocalDate> onDateChanged;
     private boolean updatingInternal = false;
 
+    private final boolean allowPast;
+    private final boolean showChips;
+    private final ChipRow row;
+
     public DateSelector() {
-        setLayout(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        this(false);
+    }
+
+    /** @param allowPast true for history views (audit, reports) where past dates are valid choices. */
+    public DateSelector(boolean allowPast) {
+        this(allowPast, true);
+    }
+
+    /** @param showChips false renders just the date field (compact filter bars). */
+    public DateSelector(boolean allowPast, boolean showChips) {
+        this.allowPast = allowPast;
+        this.showChips = showChips;
+        setLayout(new java.awt.BorderLayout());
+        row = new ChipRow(Theme.SPACE_8);
+        add(row, java.awt.BorderLayout.CENTER);
         setOpaque(false);
 
-        selectedDate = LocalDate.now();
+        selectedDate = util.DbClock.today();
 
-        // 1. Quick Chips: Today, Tomorrow, +4 consecutive days
-        addDateChip("Today", selectedDate);
-        addDateChip("Tomorrow", selectedDate.plusDays(1));
-        for (int i = 2; i <= 5; i++) {
-            LocalDate d = selectedDate.plusDays(i);
-            addDateChip(d.format(CHIP_FMT), d);
+        // 1. Quick chips: forward-looking for booking screens, backward-looking for history views
+        if (!showChips) {
+            // compact mode: no chips
+        } else if (allowPast) {
+            addDateChip("Today", selectedDate);
+            addDateChip("Yesterday", selectedDate.minusDays(1));
+            addDateChip("7 days ago", selectedDate.minusDays(7));
+            addDateChip("30 days ago", selectedDate.minusDays(30));
+        } else {
+            addDateChip("Today", selectedDate);
+            addDateChip("Tomorrow", selectedDate.plusDays(1));
+            for (int i = 2; i <= 5; i++) {
+                LocalDate d = selectedDate.plusDays(i);
+                addDateChip(d.format(CHIP_FMT), d);
+            }
         }
 
         // Default select "Today"
@@ -62,30 +80,29 @@ public class DateSelector extends JPanel {
 
         // 2. Spinner for "Other date"
         Date todayDate = Date.from(selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
-        spinnerModel = new SpinnerDateModel(todayDate, todayDate, null, Calendar.DAY_OF_MONTH);
+        spinnerModel = new SpinnerDateModel(todayDate, allowPast ? null : todayDate, null, Calendar.DAY_OF_MONTH);
         dateSpinner = new JSpinner(spinnerModel);
         JSpinner.DateEditor editor = new JSpinner.DateEditor(dateSpinner, "dd-MM-yyyy");
         dateSpinner.setEditor(editor);
-        dateSpinner.setPreferredSize(new Dimension(125, 36));
+        Form.input(dateSpinner, 138);
 
         dateSpinner.addChangeListener(e -> {
             if (updatingInternal) return;
             Date val = (Date) dateSpinner.getValue();
             LocalDate newDate = Instant.ofEpochMilli(val.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
-            if (newDate.isBefore(LocalDate.now())) {
-                newDate = LocalDate.now();
+            if (!allowPast && newDate.isBefore(util.DbClock.today())) {
+                newDate = util.DbClock.today();
                 dateSpinner.setValue(Date.from(newDate.atStartOfDay(ZoneId.systemDefault()).toInstant()));
             }
             setDate(newDate, false);
         });
 
-        JLabel otherLabel = new JLabel("Other date:");
+        JLabel otherLabel = new JLabel(allowPast ? "Pick date:" : "Other date:");
         otherLabel.setFont(Theme.FONT_SMALL_BOLD);
         otherLabel.setForeground(Theme.TEXT_MUTED);
 
-        add(Box.createHorizontalStrut(Theme.SPACE_8));
-        add(otherLabel);
-        add(dateSpinner);
+        if (showChips) row.add(otherLabel);
+        row.add(dateSpinner);
     }
 
     public void setOnDateChanged(Consumer<LocalDate> onDateChanged) {
@@ -131,11 +148,19 @@ public class DateSelector extends JPanel {
         }
     }
 
+    public boolean isAllowPast() {
+        return allowPast;
+    }
+
+    public boolean isShowChips() {
+        return showChips;
+    }
+
     private void addDateChip(String label, LocalDate date) {
         DateChipButton btn = new DateChipButton(label, date);
         chipGroup.add(btn);
         chipButtons.add(btn);
-        add(btn);
+        row.add(btn);
 
         btn.addActionListener(e -> {
             if (updatingInternal) return;
@@ -143,41 +168,13 @@ public class DateSelector extends JPanel {
         });
     }
 
-    private static class DateChipButton extends JToggleButton {
+    private static class DateChipButton extends ChipToggle {
         private final LocalDate chipDate;
 
         public DateChipButton(String label, LocalDate chipDate) {
-            super(label);
+            super(label, ChipToggle.Style.GOLD);
             this.chipDate = chipDate;
-            setFont(Theme.FONT_BODY);
-            setFocusPainted(false);
-            setBorderPainted(false);
-            setContentAreaFilled(false);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setPreferredSize(new Dimension(86, 36));
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            if (isSelected()) {
-                g2.setColor(Theme.ACCENT_GOLD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-                setForeground(Color.WHITE);
-                setFont(Theme.FONT_BODY_BOLD);
-            } else {
-                g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-                g2.setColor(getModel().isRollover() ? Theme.ACCENT_GOLD : Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
-                setForeground(Theme.TEXT_PRIMARY);
-                setFont(Theme.FONT_BODY);
-            }
-
-            g2.dispose();
-            super.paintComponent(g);
+            minWidth(84);
         }
     }
 }

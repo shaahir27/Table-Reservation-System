@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * Collects all field-level validation errors into a single ValidationException.
  */
 public class ValidationUtil {
-    private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-z\\s.'\\-]{2,100}$");
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}\\p{M}\\s.'\\-]{2,100}$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^[6-9]\\d{9}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
     private static final Pattern TABLE_NUM_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{1,10}$");
@@ -128,14 +128,14 @@ public class ValidationUtil {
 
         if (date == null) {
             errors.put("date", "Reservation date is required.");
-        } else if (date.isBefore(LocalDate.now())) {
+        } else if (date.isBefore(DbClock.today())) {
             errors.put("date", "Reservation date cannot be in the past.");
         }
 
         if (slot == null) {
             errors.put("slot", "Please select a time slot.");
-        } else if (date != null && date.isEqual(LocalDate.now())) {
-            if (!slot.getStartTime().isAfter(java.time.LocalTime.now())) {
+        } else if (date != null && date.isEqual(DbClock.today())) {
+            if (!slot.getStartTime().isAfter(DbClock.localTime())) {
                 errors.put("slot", "Selected time slot for today has already passed or started.");
             }
         }

@@ -44,7 +44,7 @@ graph TD
     subgraph Engine ["Database Engine (Oracle XE)"]
         ORACLE[(Oracle Database 11g/18c/21c)]
         IDX[Unique Index: UQ_ACTIVE_BOOKING]
-        TRG[Trigger: TRG_CHECK_CAPACITY]
+        TRG[Trigger: trg_reservation_rules]
     end
 
     UI_P --> SVC_R & SVC_C & SVC_T & SVC_REP

@@ -110,23 +110,24 @@ CREATE UNIQUE INDEX uq_active_booking ON reservation (
 );
 ```
 
-### Table Capacity Integrity Trigger (`TRG_CHECK_CAPACITY`)
-Prevents guest count exceeding table capacity directly at SQL level:
+### Table Reservation Integrity Trigger (`trg_reservation_rules`)
+Prevents guest count exceeding table capacity and blocks bookings on unavailable tables:
 ```sql
-CREATE OR REPLACE TRIGGER trg_check_capacity
-BEFORE INSERT OR UPDATE ON reservation
+CREATE OR REPLACE TRIGGER trg_reservation_rules
+BEFORE INSERT OR UPDATE OF table_id, guest_count ON reservation
 FOR EACH ROW
 DECLARE
-    v_cap NUMBER;
+    v_capacity NUMBER;
+    v_status   VARCHAR2(20);
 BEGIN
-    SELECT capacity INTO v_cap
-    FROM   restaurant_table
-    WHERE  table_id = :NEW.table_id;
+    SELECT capacity, status INTO v_capacity, v_status
+      FROM restaurant_table WHERE table_id = :NEW.table_id;
 
-    IF :NEW.guest_count > v_cap THEN
-        RAISE_APPLICATION_ERROR(-20001,
-            'Guest count (' || :NEW.guest_count ||
-            ') exceeds table capacity (' || v_cap || ').');
+    IF :NEW.guest_count > v_capacity THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Guest count exceeds table capacity');
+    END IF;
+    IF INSERTING AND v_status <> 'AVAILABLE' THEN
+        RAISE_APPLICATION_ERROR(-20002, 'Table is not available for booking');
     END IF;
 END;
 /

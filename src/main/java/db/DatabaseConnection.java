@@ -97,13 +97,13 @@ public class DatabaseConnection {
         try {
             return DriverManager.getConnection(url, user, pass);
         } catch (SQLException e) {
-            throw (DatabaseUnavailableException) OracleErrorMapper.map(e, "DatabaseConnection.getConnection");
+            throw OracleErrorMapper.map(e, "DatabaseConnection.getConnection");
         }
     }
 
     /**
      * Verifies that the database is reachable and credentials are valid.
-     * Throws DatabaseUnavailableException on failure.
+     * Throws AppException on failure.
      */
     public static void testConnection() {
         try (Connection con = getConnection()) {
@@ -112,7 +112,7 @@ public class DatabaseConnection {
             }
             AppLog.info("Database connection test succeeded.");
         } catch (SQLException e) {
-            throw (DatabaseUnavailableException) OracleErrorMapper.map(e, "DatabaseConnection.testConnection");
+            throw OracleErrorMapper.map(e, "DatabaseConnection.testConnection");
         }
     }
 

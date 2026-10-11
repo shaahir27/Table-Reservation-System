@@ -10,19 +10,27 @@ public class Customer {
     private String name;
     private String phone;
     private String email;
+    private String tags = "";
+    private String notes = "";
 
     public Customer() {
     }
 
     public Customer(int customerId, String name, String phone, String email) {
+        this(customerId, name, phone, email, "", "");
+    }
+
+    public Customer(String name, String phone, String email) {
+        this(0, name, phone, email, "", "");
+    }
+
+    public Customer(int customerId, String name, String phone, String email, String tags, String notes) {
         this.customerId = customerId;
         this.name = name;
         this.phone = phone;
         this.email = email;
-    }
-
-    public Customer(String name, String phone, String email) {
-        this(0, name, phone, email);
+        this.tags = tags != null ? tags : "";
+        this.notes = notes != null ? notes : "";
     }
 
     public int getCustomerId() {
@@ -55,6 +63,22 @@ public class Customer {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getTags() {
+        return tags != null ? tags : "";
+    }
+
+    public void setTags(String tags) {
+        this.tags = tags != null ? tags : "";
+    }
+
+    public String getNotes() {
+        return notes != null ? notes : "";
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes != null ? notes : "";
     }
 
     @Override
