@@ -1,14 +1,15 @@
 package ui;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import exception.AppException;
 import model.AppUser;
-import security.PasswordPolicy;
 import security.Role;
-import security.Session;
 import service.UserService;
+import ui.components.ChipRow;
+import ui.components.AppButton;
+import ui.components.Form;
+import ui.components.StatusPillRenderer;
+import ui.components.StyledTable;
 import ui.components.Toast;
-import util.AppLog;
 import util.Ui;
 
 import javax.swing.BorderFactory;
@@ -18,25 +19,17 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
+import ui.components.Dialogs;
+import ui.components.StaffDetailDialog;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
-import javax.swing.ListSelectionModel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.security.SecureRandom;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -56,6 +49,7 @@ public class StaffPanel extends BasePanel {
     private List<AppUser> currentUsers = new ArrayList<>();
 
     private JButton addStaffBtn;
+    private JButton viewProfileBtn;
     private JButton changeRoleBtn;
     private JButton resetPwdBtn;
     private JButton toggleStatusBtn;
@@ -72,32 +66,13 @@ public class StaffPanel extends BasePanel {
         mainLayout.setOpaque(false);
 
         // Top Toolbar
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        JPanel toolbar = new ChipRow(12);
         toolbar.setOpaque(false);
 
-        addStaffBtn = new JButton("+ Add Staff Member") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        addStaffBtn.setFont(Theme.FONT_BODY_BOLD);
-        addStaffBtn.setForeground(Color.WHITE);
-        addStaffBtn.setContentAreaFilled(false);
-        addStaffBtn.setBorderPainted(false);
-        addStaffBtn.setFocusPainted(false);
-        addStaffBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        addStaffBtn.setPreferredSize(new Dimension(170, 38));
+        addStaffBtn = AppButton.primary("+ Add Staff Member");
         addStaffBtn.addActionListener(e -> showAddStaffDialog());
 
-        refreshBtn = new JButton("↻ Refresh");
-        refreshBtn.setFont(Theme.FONT_BODY);
-        refreshBtn.setPreferredSize(new Dimension(100, 38));
+        refreshBtn = AppButton.secondary("Refresh");
         refreshBtn.addActionListener(e -> loadUsers());
 
         toolbar.add(addStaffBtn);
@@ -113,66 +88,48 @@ public class StaffPanel extends BasePanel {
             }
         };
 
-        userTable = new JTable(tableModel);
-        userTable.setFont(Theme.FONT_BODY);
-        userTable.setRowHeight(42);
-        userTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        userTable = new StyledTable(tableModel).emptyMessage("No staff accounts found.");
         userTable.getSelectionModel().addListSelectionListener(e -> updateActionButtonsState());
-
-        // Custom Cell Renderers
-        userTable.getColumnModel().getColumn(3).setCellRenderer(new DefaultTableCellRenderer() {
+        userTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-                JLabel l = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                l.setHorizontalAlignment(SwingConstants.CENTER);
-                String roleStr = String.valueOf(value);
-                if ("MANAGER".equalsIgnoreCase(roleStr)) {
-                    l.setForeground(Theme.ACCENT_GOLD);
-                } else {
-                    l.setForeground(new Color(148, 163, 184));
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    openStaffProfile();
                 }
-                return l;
             }
         });
 
-        userTable.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer() {
-            @Override
-            public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-                JLabel l = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                l.setHorizontalAlignment(SwingConstants.CENTER);
-                String statusStr = String.valueOf(value);
-                if ("Active".equalsIgnoreCase(statusStr)) {
-                    l.setForeground(Theme.SUCCESS);
-                } else {
-                    l.setForeground(Theme.DANGER);
-                }
-                return l;
-            }
-        });
+        // Role and status render as palette pills
+        userTable.getColumnModel().getColumn(0).setCellRenderer(StyledTable.centered());
+        userTable.getColumnModel().getColumn(3).setCellRenderer(new StatusPillRenderer());
+        userTable.getColumnModel().getColumn(4).setCellRenderer(new StatusPillRenderer());
 
         JScrollPane scrollPane = new JScrollPane(userTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(Theme.CARD_BORDER, 1));
+        scrollPane.getViewport().setBackground(Theme.CARD_BG);
         mainLayout.add(scrollPane, BorderLayout.CENTER);
 
         // Bottom Action Bar
-        JPanel bottomActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        JPanel bottomActions = new ChipRow(12, true);
         bottomActions.setOpaque(false);
 
-        changeRoleBtn = new JButton("Change Role");
-        changeRoleBtn.setFont(Theme.FONT_BODY);
+        viewProfileBtn = AppButton.primary("👤 View Staff Profile");
+        viewProfileBtn.setEnabled(false);
+        viewProfileBtn.addActionListener(e -> openStaffProfile());
+
+        changeRoleBtn = AppButton.secondary("Change Role");
         changeRoleBtn.setEnabled(false);
         changeRoleBtn.addActionListener(e -> handleChangeRole());
 
-        resetPwdBtn = new JButton("Reset Password");
-        resetPwdBtn.setFont(Theme.FONT_BODY);
+        resetPwdBtn = AppButton.secondary("Reset Password");
         resetPwdBtn.setEnabled(false);
         resetPwdBtn.addActionListener(e -> handleResetPassword());
 
-        toggleStatusBtn = new JButton("Toggle Status");
-        toggleStatusBtn.setFont(Theme.FONT_BODY);
+        toggleStatusBtn = AppButton.secondary("Toggle Status");
         toggleStatusBtn.setEnabled(false);
         toggleStatusBtn.addActionListener(e -> handleToggleStatus());
 
+        bottomActions.add(viewProfileBtn);
         bottomActions.add(changeRoleBtn);
         bottomActions.add(resetPwdBtn);
         bottomActions.add(toggleStatusBtn);
@@ -204,6 +161,7 @@ public class StaffPanel extends BasePanel {
                         });
                     }
                     updateActionButtonsState();
+                    if (userTable instanceof StyledTable st) st.reveal();
                 },
                 error -> Toast.show(this, "Could not load staff accounts: " + error.getMessage(), Toast.Type.ERROR)
         );
@@ -212,6 +170,7 @@ public class StaffPanel extends BasePanel {
     private void updateActionButtonsState() {
         int row = userTable.getSelectedRow();
         boolean selected = row >= 0 && row < currentUsers.size();
+        if (viewProfileBtn != null) viewProfileBtn.setEnabled(selected);
         changeRoleBtn.setEnabled(selected);
         resetPwdBtn.setEnabled(selected);
         toggleStatusBtn.setEnabled(selected);
@@ -222,6 +181,13 @@ public class StaffPanel extends BasePanel {
         }
     }
 
+    private void openStaffProfile() {
+        int row = userTable.getSelectedRow();
+        if (row < 0 || row >= currentUsers.size()) return;
+        AppUser u = currentUsers.get(row);
+        StaffDetailDialog.show(SwingUtilities.getWindowAncestor(this), u, userService, this::loadUsers);
+    }
+
     private void showAddStaffDialog() {
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this) instanceof java.awt.Frame f ? f : null, "Add Staff Account", true);
         dialog.setLayout(new BorderLayout());
@@ -229,40 +195,42 @@ public class StaffPanel extends BasePanel {
         JPanel form = new JPanel();
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.setBackground(Theme.CARD_BG);
-        form.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
+        form.setBorder(BorderFactory.createEmptyBorder(26, 30, 24, 30));
+
+        JLabel heading = new JLabel("New staff account");
+        heading.setFont(Theme.FONT_SECTION.deriveFont(18f));
+        heading.setForeground(Theme.TEXT_PRIMARY);
+        heading.setAlignmentX(0f);
+        JLabel sub = new JLabel("They will be asked to choose a new password at first sign-in.");
+        sub.setFont(Theme.FONT_SMALL);
+        sub.setForeground(Theme.TEXT_MUTED);
+        sub.setAlignmentX(0f);
+        form.add(heading);
+        form.add(Box.createVerticalStrut(4));
+        form.add(sub);
+        form.add(Box.createVerticalStrut(20));
 
         JTextField nameField = new JTextField();
-        nameField.setPreferredSize(new Dimension(300, 36));
+        nameField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. Priya Patel");
         JTextField userField = new JTextField();
-        userField.setPreferredSize(new Dimension(300, 36));
+        userField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. priya");
         JComboBox<Role> roleBox = new JComboBox<>(Role.values());
-        roleBox.setPreferredSize(new Dimension(300, 36));
         JPasswordField pwdField = new JPasswordField();
-        pwdField.setPreferredSize(new Dimension(300, 36));
         pwdField.putClientProperty(FlatClientProperties.STYLE, "showRevealButton: true");
+        pwdField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "At least 10 characters");
 
-        form.add(new JLabel("Full Name:"));
-        form.add(Box.createVerticalStrut(4));
-        form.add(nameField);
-        form.add(Box.createVerticalStrut(10));
-        form.add(new JLabel("Username:"));
-        form.add(Box.createVerticalStrut(4));
-        form.add(userField);
-        form.add(Box.createVerticalStrut(10));
-        form.add(new JLabel("Role:"));
-        form.add(Box.createVerticalStrut(4));
-        form.add(roleBox);
-        form.add(Box.createVerticalStrut(10));
-        form.add(new JLabel("Temporary Initial Password (min 10 chars):"));
-        form.add(Box.createVerticalStrut(4));
-        form.add(pwdField);
-        form.add(Box.createVerticalStrut(16));
+        form.add(Form.field("Full name", nameField, null));
+        form.add(Form.field("Username", userField, null));
+        form.add(Form.field("Role", roleBox, null));
+        form.add(Form.field("Temporary password (min 10 characters)", pwdField, null));
+        form.add(Box.createVerticalStrut(6));
 
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        JPanel btnPanel = new ChipRow(10, true);
         btnPanel.setOpaque(false);
-        JButton cancelBtn = new JButton("Cancel");
+        btnPanel.setAlignmentX(0f);
+        JButton cancelBtn = AppButton.secondary("Cancel");
         cancelBtn.addActionListener(e -> dialog.dispose());
-        JButton saveBtn = new JButton("Create Account");
+        AppButton saveBtn = AppButton.primary("Create Account");
         saveBtn.addActionListener(e -> {
             String name = nameField.getText().trim();
             String username = userField.getText().trim();
@@ -270,11 +238,11 @@ public class StaffPanel extends BasePanel {
             char[] pwd = pwdField.getPassword();
 
             if (name.isBlank() || username.isBlank() || pwd.length == 0) {
-                JOptionPane.showMessageDialog(dialog, "Please fill out all fields.", "Validation Error", JOptionPane.ERROR_MESSAGE);
+                Dialogs.showMessageDialog(dialog, "Please fill out all fields.", "Validation Error", Dialogs.ERROR_MESSAGE);
                 return;
             }
 
-            saveBtn.setEnabled(false);
+            saveBtn.setLoading(true);
             Ui.async(
                     () -> userService.createUser(username, name, role, pwd, true),
                     newUser -> {
@@ -283,8 +251,8 @@ public class StaffPanel extends BasePanel {
                         loadUsers();
                     },
                     error -> {
-                        saveBtn.setEnabled(true);
-                        JOptionPane.showMessageDialog(dialog, error.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        saveBtn.setLoading(false);
+                        Dialogs.showMessageDialog(dialog, error.getMessage(), "Could not create account", Dialogs.ERROR_MESSAGE);
                     }
             );
         });
@@ -292,9 +260,12 @@ public class StaffPanel extends BasePanel {
         btnPanel.add(cancelBtn);
         btnPanel.add(saveBtn);
         form.add(btnPanel);
+        dialog.getRootPane().setDefaultButton(saveBtn);
 
         dialog.getContentPane().add(form);
+        dialog.setMinimumSize(new Dimension(440, 0));
         dialog.pack();
+        dialog.setResizable(false);
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
     }
@@ -305,12 +276,12 @@ public class StaffPanel extends BasePanel {
         AppUser user = currentUsers.get(row);
 
         Role newRole = user.getRole() == Role.MANAGER ? Role.HOST : Role.MANAGER;
-        int opt = JOptionPane.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
+        int opt = Dialogs.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
                 "Change role of " + user.getFullName() + " (" + user.getUsername() + ") to " + newRole + "?",
                 "Confirm Role Change",
-                JOptionPane.YES_NO_OPTION);
+                Dialogs.YES_NO_OPTION);
 
-        if (opt == JOptionPane.YES_OPTION) {
+        if (opt == Dialogs.YES_OPTION) {
             Ui.async(
                     () -> {
                         userService.changeRole(user.getUserId(), newRole);
@@ -332,24 +303,24 @@ public class StaffPanel extends BasePanel {
 
         // Generate a 12-char secure random temporary password
         String tempPwd = generateRandomPassword();
-        int opt = JOptionPane.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
+        int opt = Dialogs.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
                 "Reset password for " + user.getFullName() + " (" + user.getUsername() + ")?\n" +
                 "The user will be prompted to set a new password on next login.",
                 "Confirm Password Reset",
-                JOptionPane.YES_NO_OPTION);
+                Dialogs.YES_NO_OPTION);
 
-        if (opt == JOptionPane.YES_OPTION) {
+        if (opt == Dialogs.YES_OPTION) {
             Ui.async(
                     () -> {
                         userService.resetPassword(user.getUserId(), tempPwd.toCharArray());
                         return tempPwd;
                     },
                     pwd -> {
-                        JOptionPane.showMessageDialog(SwingUtilities.getWindowAncestor(this),
+                        Dialogs.showMessageDialog(SwingUtilities.getWindowAncestor(this),
                                 "Temporary password generated:\n\n   " + pwd + "\n\n" +
                                 "Please provide this temporary password to the staff member.",
                                 "Password Reset Complete",
-                                JOptionPane.INFORMATION_MESSAGE);
+                                Dialogs.INFORMATION_MESSAGE);
                         Toast.show(this, "Password reset for " + user.getUsername(), Toast.Type.SUCCESS);
                         loadUsers();
                     },
@@ -366,12 +337,12 @@ public class StaffPanel extends BasePanel {
         boolean willDeactivate = user.isActive();
         String actionName = willDeactivate ? "Deactivate" : "Reactivate";
 
-        int opt = JOptionPane.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
+        int opt = Dialogs.showConfirmDialog(SwingUtilities.getWindowAncestor(this),
                 actionName + " account for " + user.getFullName() + " (" + user.getUsername() + ")?",
                 "Confirm Status Change",
-                JOptionPane.YES_NO_OPTION);
+                Dialogs.YES_NO_OPTION);
 
-        if (opt == JOptionPane.YES_OPTION) {
+        if (opt == Dialogs.YES_OPTION) {
             Ui.async(
                     () -> {
                         if (willDeactivate) {

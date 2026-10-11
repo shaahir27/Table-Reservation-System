@@ -60,4 +60,30 @@ public class ReportService {
         auth.require(Permission.REPORT_VIEW);
         return reportDAO.getReservationsByTimeSlot();
     }
+
+    public ReportResult getNoShowAnalysisReport() {
+        auth.require(Permission.REPORT_VIEW);
+        return reportDAO.getNoShowAnalysis();
+    }
+
+    public ReportResult getRecoveredCoversReport() {
+        auth.require(Permission.REPORT_VIEW);
+        return reportDAO.getRecoveredCovers();
+    }
+
+    public ReportResult getSlotUtilisationReport(LocalDate fromDate, LocalDate toDate) {
+        auth.require(Permission.REPORT_VIEW);
+        if (fromDate == null || toDate == null) {
+            throw new ValidationException("Both start and end dates are required.");
+        }
+        if (fromDate.isAfter(toDate)) {
+            throw new ValidationException("Start date cannot be after end date.");
+        }
+        return reportDAO.getSlotUtilisation(fromDate, toDate);
+    }
+
+    public ReportResult getWaitlistFunnelReport() {
+        auth.require(Permission.REPORT_VIEW);
+        return reportDAO.getWaitlistFunnel();
+    }
 }

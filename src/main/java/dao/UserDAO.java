@@ -215,6 +215,18 @@ public class UserDAO {
         }
     }
 
+    public void updateFullName(int userId, String fullName) {
+        String sql = "UPDATE app_user SET full_name = ? WHERE user_id = ?";
+        try (Connection con = DatabaseConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, fullName);
+            ps.setInt(2, userId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "UserDAO.updateFullName");
+        }
+    }
+
     private AppUser mapRow(ResultSet rs) throws SQLException {
         int userId = rs.getInt("user_id");
         String username = rs.getString("username");

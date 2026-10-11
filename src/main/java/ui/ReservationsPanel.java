@@ -8,7 +8,13 @@ import model.RestaurantTable;
 import model.TimeSlot;
 import service.ReservationService;
 import service.TableService;
+import ui.components.ChipRow;
+import ui.components.AppButton;
+import ui.components.Card;
+import ui.components.CustomerDetailDialog;
+import ui.components.Form;
 import ui.components.StatusPillRenderer;
+import ui.components.StyledTable;
 import ui.components.Toast;
 import util.Ui;
 
@@ -19,27 +25,21 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
+import ui.components.Dialogs;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
-import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerDateModel;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -49,19 +49,20 @@ import java.util.List;
 /**
  * Reservation Management and Operations Panel (Section 10.4).
  * Supports parameterized multi-criteria searching, status filtering,
- * cancellation with double-booking index release, and completion.
+ * guest seating, completion, cancellation with index release, and full booking inspection.
  */
 public class ReservationsPanel extends BasePanel {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
     private final ReservationService reservationService;
     private final TableService tableService;
+    private final service.CustomerService customerService;
 
     // Filter controls
     private final JTextField searchTextField = new JTextField();
     private final JCheckBox dateFilterCheckBox = new JCheckBox("Date:");
     private final JSpinner dateSpinner = new JSpinner(new SpinnerDateModel());
-    private final JComboBox<String> statusFilterCombo = new JComboBox<>(new String[]{"ALL", "CONFIRMED", "COMPLETED", "CANCELLED"});
+    private final JComboBox<String> statusFilterCombo = new JComboBox<>(new String[]{"ALL", "CONFIRMED", "SEATED", "COMPLETED", "CANCELLED"});
     private final JComboBox<String> tableFilterCombo = new JComboBox<>();
     private final JButton searchBtn;
     private final JButton resetBtn;
@@ -70,23 +71,33 @@ public class ReservationsPanel extends BasePanel {
     private final DefaultTableModel tableModel;
     private final JTable resultsTable;
     private final JLabel countFooterLabel = new JLabel("0 reservations found");
+    private final JLabel actionHintLabel = new JLabel("💡 Select a reservation above to manage (Seat Guest, Complete, Cancel, or View Details)");
     private final List<ReservationDetail> currentResults = new ArrayList<>();
 
     // Actions
-    private final JButton cancelBtn;
+    private final JButton seatGuestBtn;
     private final JButton markCompletedBtn;
+    private final JButton cancelBtn;
+    private final JButton viewDetailsBtn;
+    private final JButton viewCustomerBtn;
 
     public ReservationsPanel() {
-        this(new ReservationService(), new TableService());
+        this(new ReservationService(), new TableService(), new service.CustomerService());
     }
 
     public ReservationsPanel(ReservationService reservationService, TableService tableService) {
+        this(reservationService, tableService, new service.CustomerService());
+    }
+
+    public ReservationsPanel(ReservationService reservationService, TableService tableService, service.CustomerService customerService) {
         super("Reservations & History");
         this.reservationService = reservationService;
         this.tableService = tableService;
+        this.customerService = customerService;
 
         // Date spinner styling
         JSpinner.DateEditor editor = new JSpinner.DateEditor(dateSpinner, "dd-MM-yyyy");
+        dateSpinner.setValue(new Date());
         dateSpinner.setEditor(editor);
         dateSpinner.setEnabled(false);
         dateFilterCheckBox.setFont(Theme.FONT_BODY_BOLD);
@@ -94,17 +105,28 @@ public class ReservationsPanel extends BasePanel {
         dateFilterCheckBox.addActionListener(e -> dateSpinner.setEnabled(dateFilterCheckBox.isSelected()));
 
         searchBtn = createPrimaryButton("Search");
-        searchBtn.setPreferredSize(new Dimension(100, 36));
-
         resetBtn = createSecondaryButton("Reset");
-        resetBtn.setPreferredSize(new Dimension(85, 36));
 
-        cancelBtn = createDangerButton("Cancel Reservation");
-        cancelBtn.setEnabled(false);
+        seatGuestBtn = createPrimaryButton("Seat Guest");
+        seatGuestBtn.setEnabled(false);
+        seatGuestBtn.setToolTipText("Seat arriving guest at their assigned table");
 
         markCompletedBtn = createSecondaryButton("Mark Completed");
         markCompletedBtn.setEnabled(false);
-        markCompletedBtn.setPreferredSize(new Dimension(145, 36));
+        markCompletedBtn.setToolTipText("Mark dining finished and release table");
+
+        cancelBtn = createDangerButton("Cancel Reservation");
+        cancelBtn.setEnabled(false);
+        cancelBtn.setToolTipText("Cancel reservation and release table slot");
+
+        viewDetailsBtn = createSecondaryButton("View Details");
+        viewDetailsBtn.setEnabled(false);
+        viewDetailsBtn.setToolTipText("Inspect customer, table, and booking audit details");
+
+        viewCustomerBtn = createSecondaryButton("👤 Guest 360° Profile");
+        viewCustomerBtn.setEnabled(false);
+        viewCustomerBtn.setToolTipText("Open guest profile, hospitality tags, and full dining history");
+        viewCustomerBtn.addActionListener(e -> onViewCustomerSelectedReservation());
 
         // Setup results table
         tableModel = new DefaultTableModel(new String[]{
@@ -116,30 +138,29 @@ public class ReservationsPanel extends BasePanel {
             }
         };
 
-        resultsTable = new JTable(tableModel);
-        resultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        resultsTable.setRowHeight(38);
-        resultsTable.getTableHeader().setPreferredSize(new Dimension(0, 40));
-        resultsTable.getTableHeader().setFont(Theme.FONT_BODY_BOLD);
-        resultsTable.setFont(Theme.FONT_BODY);
+        resultsTable = new StyledTable(tableModel).emptyMessage("No reservations match these filters.");
 
         // Center alignments
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
         centerRenderer.setHorizontalAlignment(JLabel.CENTER);
         resultsTable.getColumnModel().getColumn(0).setCellRenderer(centerRenderer);
-        resultsTable.getColumnModel().getColumn(0).setMaxWidth(90);
         resultsTable.getColumnModel().getColumn(3).setCellRenderer(centerRenderer);
-        resultsTable.getColumnModel().getColumn(3).setMaxWidth(80);
         resultsTable.getColumnModel().getColumn(6).setCellRenderer(centerRenderer);
-        resultsTable.getColumnModel().getColumn(6).setMaxWidth(70);
-
         resultsTable.getColumnModel().getColumn(7).setCellRenderer(new StatusPillRenderer());
-        resultsTable.getColumnModel().getColumn(7).setMinWidth(120);
 
         // Row selection listener to enable/disable action buttons
         resultsTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 updateActionButtonsState();
+            }
+        });
+
+        resultsTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    onViewCustomerSelectedReservation();
+                }
             }
         });
 
@@ -149,7 +170,9 @@ public class ReservationsPanel extends BasePanel {
 
     @Override
     public void onShown() {
-        loadTableOptions();
+        if (tableFilterCombo.getItemCount() <= 1) {
+            loadTableOptions();
+        }
         performSearch();
     }
 
@@ -157,20 +180,12 @@ public class ReservationsPanel extends BasePanel {
         searchBtn.addActionListener(e -> performSearch());
         searchTextField.addActionListener(e -> performSearch());
 
-        resetBtn.addActionListener(e -> {
-            searchTextField.setText("");
-            dateFilterCheckBox.setSelected(false);
-            dateSpinner.setEnabled(false);
-            dateSpinner.setValue(new Date());
-            statusFilterCombo.setSelectedIndex(0);
-            if (tableFilterCombo.getItemCount() > 0) {
-                tableFilterCombo.setSelectedIndex(0);
-            }
-            performSearch();
-        });
+        resetBtn.addActionListener(e -> applyPresetFilter("ALL"));
 
-        cancelBtn.addActionListener(e -> onCancelSelectedReservation());
+        seatGuestBtn.addActionListener(e -> onSeatSelectedReservation());
         markCompletedBtn.addActionListener(e -> onMarkCompletedSelectedReservation());
+        cancelBtn.addActionListener(e -> onCancelSelectedReservation());
+        viewDetailsBtn.addActionListener(e -> onViewDetailsSelectedReservation());
     }
 
     private void initLayout() {
@@ -182,11 +197,11 @@ public class ReservationsPanel extends BasePanel {
         filterCard.setLayout(new BoxLayout(filterCard, BoxLayout.Y_AXIS));
 
         // Row 1: Search field + Search & Reset actions
-        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_12, 0));
+        JPanel row1 = new ChipRow(Theme.SPACE_12);
         row1.setOpaque(false);
         row1.setAlignmentX(0.0f);
 
-        searchTextField.setPreferredSize(new Dimension(320, 36));
+        Form.input(searchTextField, 400);
         searchTextField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search by ID, customer name, phone, or table...");
 
         row1.add(searchTextField);
@@ -194,31 +209,31 @@ public class ReservationsPanel extends BasePanel {
         row1.add(resetBtn);
 
         // Row 2: Date filter + Status filter + Table filter with comfortable spacing
-        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_24, 0));
+        JPanel row2 = new ChipRow(Theme.SPACE_24);
         row2.setOpaque(false);
         row2.setAlignmentX(0.0f);
 
-        JPanel dateGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        JPanel dateGroup = new ChipRow(Theme.SPACE_8);
         dateGroup.setOpaque(false);
-        dateSpinner.setPreferredSize(new Dimension(125, 36));
+        Form.input(dateSpinner, 140);
         dateGroup.add(dateFilterCheckBox);
         dateGroup.add(dateSpinner);
 
-        JPanel statusGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        JPanel statusGroup = new ChipRow(Theme.SPACE_8);
         statusGroup.setOpaque(false);
         JLabel statusLabel = new JLabel("Status:");
         statusLabel.setFont(Theme.FONT_BODY_BOLD);
         statusLabel.setForeground(Theme.TEXT_PRIMARY);
-        statusFilterCombo.setPreferredSize(new Dimension(135, 36));
+        Form.input(statusFilterCombo, 150);
         statusGroup.add(statusLabel);
         statusGroup.add(statusFilterCombo);
 
-        JPanel tableGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.SPACE_8, 0));
+        JPanel tableGroup = new ChipRow(Theme.SPACE_8);
         tableGroup.setOpaque(false);
         JLabel tableLabel = new JLabel("Table:");
         tableLabel.setFont(Theme.FONT_BODY_BOLD);
         tableLabel.setForeground(Theme.TEXT_PRIMARY);
-        tableFilterCombo.setPreferredSize(new Dimension(120, 36));
+        Form.input(tableFilterCombo, 140);
         tableGroup.add(tableLabel);
         tableGroup.add(tableFilterCombo);
 
@@ -237,23 +252,40 @@ public class ReservationsPanel extends BasePanel {
         resultsCard.setLayout(new BorderLayout(0, Theme.SPACE_12));
 
         JScrollPane scrollPane = new JScrollPane(resultsTable);
-        scrollPane.setBorder(BorderFactory.createLineBorder(Theme.CARD_BORDER, 1));
+        scrollPane.setBorder(BorderFactory.createLineBorder(Theme.NEUTRAL_TINT, 1));
         scrollPane.getViewport().setBackground(Theme.CARD_BG);
         resultsCard.add(scrollPane, BorderLayout.CENTER);
 
-        // 3. Action bar & Footer
-        JPanel bottomBar = new JPanel(new BorderLayout());
+        // 3. Action bar & Footer (Two-tier clean layout to prevent overlapping)
+        JPanel bottomBar = new JPanel();
+        bottomBar.setLayout(new BoxLayout(bottomBar, BoxLayout.Y_AXIS));
         bottomBar.setOpaque(false);
+        bottomBar.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_8, 0, 0, 0));
+
+        // Sub-row 1: Count and Selection Status
+        JPanel statusRow = new JPanel(new BorderLayout(Theme.SPACE_16, 0));
+        statusRow.setOpaque(false);
 
         countFooterLabel.setFont(Theme.FONT_BODY_BOLD);
-        countFooterLabel.setForeground(Theme.TEXT_MUTED);
-        bottomBar.add(countFooterLabel, BorderLayout.WEST);
+        countFooterLabel.setForeground(Theme.TEXT_PRIMARY);
 
-        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.SPACE_12, 0));
+        actionHintLabel.setFont(Theme.FONT_SMALL);
+        actionHintLabel.setForeground(Theme.TEXT_MUTED);
+
+        statusRow.add(countFooterLabel, BorderLayout.WEST);
+        statusRow.add(actionHintLabel, BorderLayout.EAST);
+        bottomBar.add(statusRow);
+        bottomBar.add(Box.createVerticalStrut(Theme.SPACE_8));
+
+        // Sub-row 2: Action buttons toolbar
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.SPACE_8, 0));
         buttonBar.setOpaque(false);
+        buttonBar.add(seatGuestBtn);
         buttonBar.add(markCompletedBtn);
         buttonBar.add(cancelBtn);
-        bottomBar.add(buttonBar, BorderLayout.EAST);
+        buttonBar.add(viewDetailsBtn);
+        buttonBar.add(viewCustomerBtn);
+        bottomBar.add(buttonBar);
 
         resultsCard.add(bottomBar, BorderLayout.SOUTH);
         mainLayout.add(resultsCard, BorderLayout.CENTER);
@@ -261,18 +293,56 @@ public class ReservationsPanel extends BasePanel {
         contentPanel.add(mainLayout, BorderLayout.CENTER);
     }
 
+    private List<TimeSlot> cachedSlots = new ArrayList<>();
+
     private void loadTableOptions() {
-        tableFilterCombo.removeAllItems();
-        tableFilterCombo.addItem("All Tables");
+        final Object previous = tableFilterCombo.getSelectedItem();
         Ui.async(
-                tableService::getAllTables,
-                tables -> {
+                () -> new Object[]{tableService.getAllTables(), reservationService.getTimeSlots()},
+                payload -> {
+                    @SuppressWarnings("unchecked")
+                    List<RestaurantTable> tables = (List<RestaurantTable>) payload[0];
+                    @SuppressWarnings("unchecked")
+                    List<TimeSlot> slots = (List<TimeSlot>) payload[1];
+                    cachedSlots = slots;
+                    tableFilterCombo.removeAllItems();
+                    tableFilterCombo.addItem("All Tables");
                     for (RestaurantTable t : tables) {
                         tableFilterCombo.addItem(t.getTableNumber());
                     }
+                    if (previous != null) tableFilterCombo.setSelectedItem(previous);
                 },
                 null
         );
+    }
+
+    public void applyPresetFilter(String preset) {
+        if ("TODAY".equalsIgnoreCase(preset)) {
+            dateFilterCheckBox.setSelected(true);
+            dateSpinner.setEnabled(true);
+            dateSpinner.setValue(new Date());
+            statusFilterCombo.setSelectedItem("ALL");
+        } else if ("CONFIRMED".equalsIgnoreCase(preset)) {
+            dateFilterCheckBox.setSelected(false);
+            dateSpinner.setEnabled(false);
+            statusFilterCombo.setSelectedItem("CONFIRMED");
+        } else if ("CANCELLED".equalsIgnoreCase(preset)) {
+            dateFilterCheckBox.setSelected(false);
+            dateSpinner.setEnabled(false);
+            statusFilterCombo.setSelectedItem("CANCELLED");
+        } else if ("SEATED".equalsIgnoreCase(preset)) {
+            dateFilterCheckBox.setSelected(false);
+            dateSpinner.setEnabled(false);
+            statusFilterCombo.setSelectedItem("SEATED");
+        } else {
+            dateFilterCheckBox.setSelected(false);
+            dateSpinner.setEnabled(false);
+            dateSpinner.setValue(new Date());
+            statusFilterCombo.setSelectedItem("ALL");
+        }
+        searchTextField.setText("");
+        if (tableFilterCombo.getItemCount() > 0) tableFilterCombo.setSelectedIndex(0);
+        performSearch();
     }
 
     private void performSearch() {
@@ -294,7 +364,10 @@ public class ReservationsPanel extends BasePanel {
 
         String selectedStatus = (String) statusFilterCombo.getSelectedItem();
         if (selectedStatus != null && !"ALL".equalsIgnoreCase(selectedStatus)) {
-            filter.setStatus(ReservationStatus.valueOf(selectedStatus));
+            try {
+                filter.setStatus(ReservationStatus.valueOf(selectedStatus));
+            } catch (IllegalArgumentException ignored) {
+            }
         }
 
         String selectedTable = (String) tableFilterCombo.getSelectedItem();
@@ -325,6 +398,7 @@ public class ReservationsPanel extends BasePanel {
                         });
                     }
 
+                    if (resultsTable instanceof StyledTable st) st.reveal();
                     countFooterLabel.setText(results.size() + (results.size() == 1 ? " reservation found" : " reservations found"));
                     updateActionButtonsState();
                 },
@@ -339,45 +413,131 @@ public class ReservationsPanel extends BasePanel {
     private void updateActionButtonsState() {
         int selectedRow = resultsTable.getSelectedRow();
         if (selectedRow < 0 || selectedRow >= currentResults.size()) {
+            seatGuestBtn.setEnabled(false);
             cancelBtn.setEnabled(false);
             markCompletedBtn.setEnabled(false);
+            viewDetailsBtn.setEnabled(false);
+            viewCustomerBtn.setEnabled(false);
+            actionHintLabel.setText("💡 Select a reservation above to manage (Seat Guest, Complete, Cancel, or View Details)");
             return;
         }
 
         ReservationDetail detail = currentResults.get(selectedRow);
-        boolean isConfirmed = detail.getStatus() == ReservationStatus.CONFIRMED;
+        ReservationStatus status = detail.getStatus();
+        viewDetailsBtn.setEnabled(true);
+        viewCustomerBtn.setEnabled(true);
 
-        // Cancel enabled only for CONFIRMED
-        cancelBtn.setEnabled(isConfirmed);
+        // Seat Guest enabled for CONFIRMED and HELD
+        boolean canSeat = (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD);
+        seatGuestBtn.setEnabled(canSeat);
 
-        // Mark Completed enabled only for CONFIRMED whose slot has begun or is in the past
-        boolean eligibleForCompletion = false;
-        if (isConfirmed) {
-            LocalDate today = util.DbClock.today();
-            if (detail.getReservationDate().isBefore(today)) {
-                eligibleForCompletion = true;
-            } else if (detail.getReservationDate().isEqual(today)) {
-                // Check slot start time against now
-                eligibleForCompletion = isSlotStarted(detail.getSlotLabel());
-            }
+        // Cancel enabled for CONFIRMED and HELD
+        boolean canCancel = (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD);
+        cancelBtn.setEnabled(canCancel);
+
+        // Mark Completed enabled for SEATED, or CONFIRMED whose slot has begun
+        boolean canComplete = (status == ReservationStatus.SEATED) ||
+                (status == ReservationStatus.CONFIRMED && (detail.getReservationDate().isBefore(util.DbClock.today()) || isSlotStarted(detail.getSlotLabel())));
+        markCompletedBtn.setEnabled(canComplete);
+
+        if (canSeat) {
+            actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (" + status + ") · Ready to Seat Guest or Cancel");
+        } else if (status == ReservationStatus.SEATED) {
+            actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (Seated at Table " + detail.getTableNumber() + ") · Ready to Mark Completed");
+        } else {
+            actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (" + status + ") · Double-click or click View Details");
         }
-        markCompletedBtn.setEnabled(eligibleForCompletion);
     }
 
     private boolean isSlotStarted(String slotLabel) {
         if (slotLabel == null) return false;
-        try {
-            // Find slot matching label
-            List<TimeSlot> slots = reservationService.getTimeSlots();
-            for (TimeSlot s : slots) {
-                if (slotLabel.contains(s.getStartTime().format(DateTimeFormatter.ofPattern("hh:mm a"))) ||
+        for (TimeSlot s : cachedSlots) {
+            if (slotLabel.contains(s.getStartTime().format(DateTimeFormatter.ofPattern("hh:mm a"))) ||
                     slotLabel.equalsIgnoreCase(s.getLabel())) {
-                    return !s.getStartTime().isAfter(util.DbClock.localTime());
-                }
+                return !s.getStartTime().isAfter(util.DbClock.localTime());
             }
-        } catch (Exception ignored) {
         }
         return false;
+    }
+
+    private void onSeatSelectedReservation() {
+        int selectedRow = resultsTable.getSelectedRow();
+        if (selectedRow < 0 || selectedRow >= currentResults.size()) return;
+
+        ReservationDetail detail = currentResults.get(selectedRow);
+
+        int confirm = Dialogs.showConfirmDialog(
+                this,
+                String.format("Seat guest %s (%d guests) at Table %s?",
+                        detail.getCustomerName(), detail.getGuestCount(), detail.getTableNumber()),
+                "Seat Arriving Guest",
+                Dialogs.YES_NO_OPTION,
+                Dialogs.QUESTION_MESSAGE
+        );
+
+        if (confirm == Dialogs.YES_OPTION) {
+            seatGuestBtn.setEnabled(false);
+            seatGuestBtn.setText("Seating...");
+
+            Ui.async(
+                    () -> {
+                        reservationService.seat(detail.getReservationId());
+                        return null;
+                    },
+                    res -> {
+                        seatGuestBtn.setText("Seat Guest");
+                        Toast.success(SwingUtilities.getWindowAncestor(this),
+                                "✓ Guest " + detail.getCustomerName() + " seated at Table " + detail.getTableNumber());
+                        performSearch();
+                    },
+                    error -> {
+                        seatGuestBtn.setText("Seat Guest");
+                        Toast.error(SwingUtilities.getWindowAncestor(this), error.getMessage());
+                        performSearch();
+                    }
+            );
+        }
+    }
+
+    private void onMarkCompletedSelectedReservation() {
+        int selectedRow = resultsTable.getSelectedRow();
+        if (selectedRow < 0 || selectedRow >= currentResults.size()) return;
+
+        ReservationDetail detail = currentResults.get(selectedRow);
+
+        int confirm = Dialogs.showConfirmDialog(
+                this,
+                "Mark reservation " + detail.getDisplayCode() + " (" + detail.getCustomerName() + ") as COMPLETED?",
+                "Complete Dining Service",
+                Dialogs.YES_NO_OPTION,
+                Dialogs.QUESTION_MESSAGE
+        );
+
+        if (confirm == Dialogs.YES_OPTION) {
+            markCompletedBtn.setEnabled(false);
+            markCompletedBtn.setText("Updating...");
+
+            Ui.async(
+                    () -> {
+                        if (detail.getStatus() == ReservationStatus.CONFIRMED) {
+                            reservationService.seat(detail.getReservationId());
+                        }
+                        reservationService.markCompleted(detail.getReservationId());
+                        return null;
+                    },
+                    res -> {
+                        markCompletedBtn.setText("Mark Completed");
+                        Toast.success(SwingUtilities.getWindowAncestor(this),
+                                "✓ Reservation " + detail.getDisplayCode() + " marked as COMPLETED. Table " + detail.getTableNumber() + " is now free.");
+                        performSearch();
+                    },
+                    error -> {
+                        markCompletedBtn.setText("Mark Completed");
+                        Toast.error(SwingUtilities.getWindowAncestor(this), error.getMessage());
+                        performSearch();
+                    }
+            );
+        }
     }
 
     private void onCancelSelectedReservation() {
@@ -395,15 +555,15 @@ public class ReservationsPanel extends BasePanel {
                 detail.getSlotLabel()
         );
 
-        int confirm = JOptionPane.showConfirmDialog(
+        int confirm = Dialogs.showConfirmDialog(
                 this,
                 message,
                 "Confirm Cancellation",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
+                Dialogs.YES_NO_OPTION,
+                Dialogs.WARNING_MESSAGE
         );
 
-        if (confirm == JOptionPane.YES_OPTION) {
+        if (confirm == Dialogs.YES_OPTION) {
             cancelBtn.setEnabled(false);
             cancelBtn.setText("Cancelling...");
 
@@ -414,7 +574,7 @@ public class ReservationsPanel extends BasePanel {
                     },
                     res -> {
                         cancelBtn.setText("Cancel Reservation");
-                        Toast.success(SwingUtilities.getWindowAncestor(this), "Reservation " + detail.getDisplayCode() + " cancelled successfully.");
+                        Toast.success(SwingUtilities.getWindowAncestor(this), "✓ Reservation " + detail.getDisplayCode() + " cancelled successfully.");
                         performSearch();
                     },
                     error -> {
@@ -426,115 +586,83 @@ public class ReservationsPanel extends BasePanel {
         }
     }
 
-    private void onMarkCompletedSelectedReservation() {
+    private void onViewDetailsSelectedReservation() {
         int selectedRow = resultsTable.getSelectedRow();
         if (selectedRow < 0 || selectedRow >= currentResults.size()) return;
 
         ReservationDetail detail = currentResults.get(selectedRow);
 
-        int confirm = JOptionPane.showConfirmDialog(
-                this,
-                "Mark reservation " + detail.getDisplayCode() + " as COMPLETED?",
-                "Complete Reservation",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE
+        String info = String.format(
+                "Booking Code: %s\n" +
+                "Customer: %s\n" +
+                "Phone: %s\n" +
+                "Table: Table %s\n" +
+                "Date: %s\n" +
+                "Dining Slot: %s\n" +
+                "Party Size: %d guests\n" +
+                "Status: %s\n" +
+                "Source: %s\n" +
+                "Reconfirmation: %s",
+                detail.getDisplayCode(),
+                detail.getCustomerName(),
+                detail.getPhone(),
+                detail.getTableNumber(),
+                detail.getReservationDate().format(DATE_FMT),
+                detail.getSlotLabel(),
+                detail.getGuestCount(),
+                detail.getStatus(),
+                detail.getSource(),
+                detail.getReconfirmStatus()
         );
 
-        if (confirm == JOptionPane.YES_OPTION) {
-            markCompletedBtn.setEnabled(false);
-            markCompletedBtn.setText("Updating...");
+        Dialogs.showMessageDialog(this, info, "Reservation Details · " + detail.getDisplayCode(), Dialogs.INFORMATION_MESSAGE);
+    }
 
-            Ui.async(
-                    () -> {
-                        reservationService.markCompleted(detail.getReservationId());
-                        return null;
-                    },
-                    res -> {
-                        markCompletedBtn.setText("Mark Completed");
-                        Toast.success(SwingUtilities.getWindowAncestor(this), "Reservation " + detail.getDisplayCode() + " marked as COMPLETED.");
-                        performSearch();
-                    },
-                    error -> {
-                        markCompletedBtn.setText("Mark Completed");
-                        Toast.error(SwingUtilities.getWindowAncestor(this), error.getMessage());
-                        performSearch();
+    private void onViewCustomerSelectedReservation() {
+        int selectedRow = resultsTable.getSelectedRow();
+        if (selectedRow < 0 || selectedRow >= currentResults.size()) return;
+        ReservationDetail detail = currentResults.get(selectedRow);
+
+        Ui.async(
+                () -> {
+                    List<model.Customer> found = customerService.searchCustomers(detail.getPhone());
+                    if (!found.isEmpty()) return found.get(0);
+                    return customerService.searchCustomers(detail.getCustomerName()).stream().findFirst().orElse(null);
+                },
+                cust -> {
+                    if (cust != null) {
+                        CustomerDetailDialog.show(
+                                SwingUtilities.getWindowAncestor(this),
+                                cust,
+                                customerService,
+                                reservationService,
+                                updated -> performSearch(),
+                                bookedCust -> {
+                                    MainFrame mf = (MainFrame) SwingUtilities.getAncestorOfClass(MainFrame.class, this);
+                                    if (mf != null) mf.showScreen("NEW_RESERVATION");
+                                }
+                        );
+                    } else {
+                        Toast.info(SwingUtilities.getWindowAncestor(this), "Customer profile not found for " + detail.getCustomerName());
                     }
-            );
-        }
+                },
+                err -> Toast.error(SwingUtilities.getWindowAncestor(this), err.getMessage())
+        );
     }
 
     private JPanel createCardPanel() {
-        JPanel card = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
-                g2.setColor(Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(16, Theme.SPACE_24, 16, Theme.SPACE_24));
-        return card;
+        return new Card(18, Theme.SPACE_24);
     }
 
     private JButton createPrimaryButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isEnabled() ? (getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD) : Theme.CARD_BORDER);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(Theme.FONT_BODY_BOLD);
-        btn.setForeground(Color.WHITE);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(110, 36));
-        return btn;
+        return AppButton.primary(text);
     }
 
     private JButton createSecondaryButton(String text) {
-        JButton btn = new JButton(text);
-        btn.setFont(Theme.FONT_BODY);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(140, 36));
-        return btn;
+        return AppButton.secondary(text);
     }
 
     private JButton createDangerButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                if (isEnabled()) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(new Color(192, 57, 43, 20));
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                    g2.setColor(Theme.DANGER);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-                    g2.dispose();
-                }
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(Theme.FONT_BODY_BOLD);
-        btn.setForeground(Theme.DANGER);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(160, 36));
-        return btn;
+        return AppButton.danger(text);
     }
 }

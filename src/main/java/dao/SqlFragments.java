@@ -7,7 +7,7 @@ public final class SqlFragments {
     private SqlFragments() {}
 
     /**
-     * SQL IN clause for active statuses that block a table slot.
+     * SQL IN clause for active statuses that block a physical table slot in UQ_ACTIVE_BOOKING.
      */
-    public static final String ACTIVE_BOOKING_STATUSES_IN = "('CONFIRMED', 'COMPLETED')";
+    public static final String ACTIVE_BOOKING_STATUSES_IN = "('HELD', 'CONFIRMED', 'SEATED', 'COMPLETED')";
 }

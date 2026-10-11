@@ -5,6 +5,12 @@ import exception.ReferenceInUseException;
 import exception.ValidationException;
 import model.Customer;
 import service.CustomerService;
+import ui.components.ChipRow;
+import ui.components.AppButton;
+import ui.components.Card;
+import ui.components.CustomerDetailDialog;
+import ui.components.Form;
+import ui.components.StyledTable;
 import ui.components.Toast;
 import util.AppLog;
 import util.Ui;
@@ -14,12 +20,11 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
+import ui.components.Dialogs;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
-import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
@@ -27,13 +32,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +59,7 @@ public class CustomerPanel extends BasePanel {
     private JButton updateBtn;
     private JButton deleteBtn;
     private JButton clearBtn;
+    private JButton viewProfileBtn;
 
     // Table & Search
     private final JTextField searchField = new JTextField();
@@ -67,6 +67,7 @@ public class CustomerPanel extends BasePanel {
     private final JTable customerTable;
     private final List<Customer> displayedCustomers = new ArrayList<>();
     private Customer selectedCustomer = null;
+    private boolean suppressSelection;
     private Timer searchDebounceTimer;
 
     public CustomerPanel() {
@@ -84,24 +85,30 @@ public class CustomerPanel extends BasePanel {
             }
         };
 
-        customerTable = new JTable(tableModel);
-        customerTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        customerTable.setRowHeight(38);
-        customerTable.getTableHeader().setPreferredSize(new Dimension(0, 40));
-        customerTable.getTableHeader().setFont(Theme.FONT_BODY_BOLD);
-        customerTable.setFont(Theme.FONT_BODY);
+        customerTable = new StyledTable(tableModel).emptyMessage("No customers found.");
 
         // Center ID column
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
         centerRenderer.setHorizontalAlignment(JLabel.CENTER);
         customerTable.getColumnModel().getColumn(0).setCellRenderer(centerRenderer);
-        customerTable.getColumnModel().getColumn(0).setMaxWidth(70);
 
         customerTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
+            if (!e.getValueIsAdjusting() && !suppressSelection) {
                 int selectedRow = customerTable.getSelectedRow();
                 if (selectedRow >= 0 && selectedRow < displayedCustomers.size()) {
                     selectCustomer(displayedCustomers.get(selectedRow));
+                }
+            }
+        });
+
+        customerTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int row = customerTable.getSelectedRow();
+                    if (row >= 0 && row < displayedCustomers.size()) {
+                        openCustomerProfile(displayedCustomers.get(row));
+                    }
                 }
             }
         });
@@ -120,7 +127,7 @@ public class CustomerPanel extends BasePanel {
 
         // LEFT: Form Card
         JPanel leftCard = createCardPanel();
-        leftCard.setPreferredSize(new Dimension(360, 0));
+        leftCard.setPreferredSize(new Dimension(380, 0));
         leftCard.setLayout(new BoxLayout(leftCard, BoxLayout.Y_AXIS));
 
         JLabel formTitle = new JLabel("Customer Details");
@@ -132,10 +139,8 @@ public class CustomerPanel extends BasePanel {
 
         // Name
         leftCard.add(createFieldLabel("Full Name *"));
-        leftCard.add(Box.createVerticalStrut(4));
-        nameField.setPreferredSize(new Dimension(300, 38));
-        nameField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        nameField.setAlignmentX(0.0f);
+        leftCard.add(Box.createVerticalStrut(6));
+        Form.input(nameField);
         nameField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. Arun Sharma");
         leftCard.add(nameField);
         styleErrorLabel(nameErrorLabel);
@@ -144,10 +149,8 @@ public class CustomerPanel extends BasePanel {
 
         // Phone
         leftCard.add(createFieldLabel("Phone Number * (10 Digits)"));
-        leftCard.add(Box.createVerticalStrut(4));
-        phoneField.setPreferredSize(new Dimension(300, 38));
-        phoneField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        phoneField.setAlignmentX(0.0f);
+        leftCard.add(Box.createVerticalStrut(6));
+        Form.input(phoneField);
         phoneField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. 9876543210");
         leftCard.add(phoneField);
         styleErrorLabel(phoneErrorLabel);
@@ -156,10 +159,8 @@ public class CustomerPanel extends BasePanel {
 
         // Email
         leftCard.add(createFieldLabel("Email Address (Optional)"));
-        leftCard.add(Box.createVerticalStrut(4));
-        emailField.setPreferredSize(new Dimension(300, 38));
-        emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        emailField.setAlignmentX(0.0f);
+        leftCard.add(Box.createVerticalStrut(6));
+        Form.input(emailField);
         emailField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. arun@example.com");
         leftCard.add(emailField);
         styleErrorLabel(emailErrorLabel);
@@ -167,7 +168,7 @@ public class CustomerPanel extends BasePanel {
         leftCard.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Form Buttons
-        JPanel buttonRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel buttonRow1 = new ChipRow(8);
         buttonRow1.setOpaque(false);
         buttonRow1.setAlignmentX(0.0f);
 
@@ -180,7 +181,7 @@ public class CustomerPanel extends BasePanel {
         updateBtn.addActionListener(e -> onUpdateCustomer());
         buttonRow1.add(updateBtn);
 
-        JPanel buttonRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel buttonRow2 = new ChipRow(8);
         buttonRow2.setOpaque(false);
         buttonRow2.setAlignmentX(0.0f);
 
@@ -193,9 +194,30 @@ public class CustomerPanel extends BasePanel {
         clearBtn.addActionListener(e -> clearForm());
         buttonRow2.add(clearBtn);
 
+        for (JPanel r : new JPanel[]{buttonRow1, buttonRow2}) {
+            for (java.awt.Component c : r.getComponents()) {
+                if (c instanceof AppButton b) b.fixedWidth(162);
+            }
+        }
         leftCard.add(buttonRow1);
         leftCard.add(Box.createVerticalStrut(Theme.SPACE_8));
         leftCard.add(buttonRow2);
+        leftCard.add(Box.createVerticalStrut(Theme.SPACE_12));
+
+        JPanel buttonRow3 = new ChipRow(8);
+        buttonRow3.setOpaque(false);
+        buttonRow3.setAlignmentX(0.0f);
+        viewProfileBtn = createSecondaryButton("👤 View 360° Profile");
+        viewProfileBtn.setEnabled(false);
+        viewProfileBtn.addActionListener(e -> {
+            if (selectedCustomer != null) {
+                openCustomerProfile(selectedCustomer);
+            }
+        });
+        if (viewProfileBtn instanceof AppButton b) b.fixedWidth(332);
+        buttonRow3.add(viewProfileBtn);
+        leftCard.add(buttonRow3);
+
         leftCard.add(Box.createVerticalGlue());
 
         contentPanel.add(leftCard, BorderLayout.WEST);
@@ -208,7 +230,7 @@ public class CustomerPanel extends BasePanel {
         JPanel searchBar = new JPanel(new BorderLayout(Theme.SPACE_12, 0));
         searchBar.setOpaque(false);
         searchField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search customers by name or phone...");
-        searchField.setPreferredSize(new Dimension(300, 38));
+        Form.input(searchField);
         searchBar.add(searchField, BorderLayout.CENTER);
 
         JButton refreshBtn = createSecondaryButton("Refresh");
@@ -218,8 +240,8 @@ public class CustomerPanel extends BasePanel {
         rightCard.add(searchBar, BorderLayout.NORTH);
 
         JScrollPane scrollPane = new JScrollPane(customerTable);
-        scrollPane.setBorder(BorderFactory.createLineBorder(Theme.CARD_BORDER, 1));
-        scrollPane.getViewport().setBackground(Color.WHITE);
+        scrollPane.setBorder(BorderFactory.createLineBorder(Theme.NEUTRAL_TINT, 1));
+        scrollPane.getViewport().setBackground(Theme.CARD_BG);
         rightCard.add(scrollPane, BorderLayout.CENTER);
 
         contentPanel.add(rightCard, BorderLayout.CENTER);
@@ -269,16 +291,29 @@ public class CustomerPanel extends BasePanel {
     private void populateTable(List<Customer> customers) {
         displayedCustomers.clear();
         displayedCustomers.addAll(customers);
-        tableModel.setRowCount(0);
-
-        for (Customer c : customers) {
-            tableModel.addRow(new Object[]{
-                    c.getCustomerId(),
-                    c.getName(),
-                    c.getPhone(),
-                    c.getEmail() != null ? c.getEmail() : ""
-            });
+        suppressSelection = true;
+        try {
+            tableModel.setRowCount(0);
+            for (Customer c : customers) {
+                tableModel.addRow(new Object[]{
+                        c.getCustomerId(),
+                        c.getName(),
+                        c.getPhone(),
+                        c.getEmail() != null ? c.getEmail() : ""
+                });
+            }
+            // keep the highlighted row in step with the form: still listed -> stay selected, else drop the stale selection
+            if (selectedCustomer != null) {
+                int keep = -1;
+                for (int i = 0; i < displayedCustomers.size(); i++) {
+                    if (displayedCustomers.get(i).getCustomerId() == selectedCustomer.getCustomerId()) keep = i;
+                }
+                if (keep >= 0) customerTable.setRowSelectionInterval(keep, keep);
+            }
+        } finally {
+            suppressSelection = false;
         }
+        if (customerTable instanceof StyledTable st) st.reveal();
     }
 
     private void selectCustomer(Customer customer) {
@@ -291,6 +326,7 @@ public class CustomerPanel extends BasePanel {
         addBtn.setEnabled(false);
         updateBtn.setEnabled(true);
         deleteBtn.setEnabled(true);
+        if (viewProfileBtn != null) viewProfileBtn.setEnabled(true);
     }
 
     private void clearForm() {
@@ -304,6 +340,7 @@ public class CustomerPanel extends BasePanel {
         addBtn.setEnabled(true);
         updateBtn.setEnabled(false);
         deleteBtn.setEnabled(false);
+        if (viewProfileBtn != null) viewProfileBtn.setEnabled(false);
     }
 
     private void onAddCustomer() {
@@ -365,18 +402,39 @@ public class CustomerPanel extends BasePanel {
         );
     }
 
+    private void openCustomerProfile(Customer c) {
+        if (c == null) return;
+        CustomerDetailDialog.show(
+                SwingUtilities.getWindowAncestor(this),
+                c,
+                customerService,
+                new service.ReservationService(),
+                updated -> {
+                    loadCustomers();
+                    selectCustomer(updated);
+                },
+                bookedCust -> {
+                    MainFrame mf = (MainFrame) SwingUtilities.getAncestorOfClass(MainFrame.class, this);
+                    if (mf != null) {
+                        mf.showScreen("NEW_RESERVATION");
+                        Toast.info(mf, "Booking reservation for guest: " + bookedCust.getName());
+                    }
+                }
+        );
+    }
+
     private void onDeleteCustomer() {
         if (selectedCustomer == null) return;
 
-        int confirm = JOptionPane.showConfirmDialog(
+        int confirm = Dialogs.showConfirmDialog(
                 this,
                 "Are you sure you want to delete customer \"" + selectedCustomer.getName() + "\" (" + selectedCustomer.getPhone() + ")?\nThis action cannot be undone.",
                 "Confirm Customer Deletion",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
+                Dialogs.YES_NO_OPTION,
+                Dialogs.WARNING_MESSAGE
         );
 
-        if (confirm != JOptionPane.YES_OPTION) return;
+        if (confirm != Dialogs.YES_OPTION) return;
 
         int customerId = selectedCustomer.getCustomerId();
         deleteBtn.setEnabled(false);
@@ -398,11 +456,11 @@ public class CustomerPanel extends BasePanel {
                     deleteBtn.setEnabled(true);
                     deleteBtn.setText("Delete");
                     if (error instanceof ReferenceInUseException) {
-                        JOptionPane.showMessageDialog(
+                        Dialogs.showMessageDialog(
                                 this,
                                 error.getMessage(),
                                 "Cannot Delete Customer",
-                                JOptionPane.ERROR_MESSAGE
+                                Dialogs.ERROR_MESSAGE
                         );
                     } else {
                         Toast.error(SwingUtilities.getWindowAncestor(this), error.getMessage());
@@ -447,90 +505,29 @@ public class CustomerPanel extends BasePanel {
     }
 
     private JPanel createCardPanel() {
-        JPanel card = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
-                g2.setColor(Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
-                g2.dispose();
-            }
-        };
-        card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_24, Theme.SPACE_24, Theme.SPACE_24, Theme.SPACE_24));
-        return card;
+        return new Card(Theme.SPACE_24);
     }
 
     private JLabel createFieldLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setFont(Theme.FONT_SMALL_BOLD);
-        label.setForeground(Theme.TEXT_MUTED);
-        label.setAlignmentX(0.0f);
-        return label;
+        return Form.label(text);
     }
 
     private void styleErrorLabel(JLabel label) {
         label.setFont(Theme.FONT_SMALL);
         label.setForeground(Theme.DANGER);
         label.setAlignmentX(0.0f);
+        label.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
     }
 
     private JButton createPrimaryButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isEnabled() ? (getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD) : Theme.CARD_BORDER);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(Theme.FONT_BODY_BOLD);
-        btn.setForeground(Color.WHITE);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(140, 38));
-        return btn;
+        return AppButton.primary(text);
     }
 
     private JButton createSecondaryButton(String text) {
-        JButton btn = new JButton(text);
-        btn.setFont(Theme.FONT_BODY);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(100, 38));
-        return btn;
+        return AppButton.secondary(text);
     }
 
     private JButton createDangerButton(String text) {
-        JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                if (isEnabled()) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(new Color(192, 57, 43, 20));
-                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                    g2.setColor(Theme.DANGER);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-                    g2.dispose();
-                }
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(Theme.FONT_BODY_BOLD);
-        btn.setForeground(Theme.DANGER);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(100, 38));
-        return btn;
+        return AppButton.danger(text);
     }
 }

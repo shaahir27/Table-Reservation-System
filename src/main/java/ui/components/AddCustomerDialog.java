@@ -18,13 +18,6 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.KeyEvent;
 import java.util.Map;
@@ -57,6 +50,7 @@ public class AddCustomerDialog extends JDialog {
         setResizable(false);
         initUI();
         pack();
+        setSize(Math.max(getWidth(), 460), getHeight());
         setLocationRelativeTo(owner);
 
         // Escape key to close
@@ -82,11 +76,9 @@ public class AddCustomerDialog extends JDialog {
 
         // Name
         content.add(createFieldLabel("Full Name *"));
-        content.add(Box.createVerticalStrut(4));
+        content.add(Box.createVerticalStrut(6));
         nameField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. Priya Patel");
-        nameField.setPreferredSize(new Dimension(320, 38));
-        nameField.setMaximumSize(new Dimension(320, 38));
-        nameField.setAlignmentX(0.0f);
+        Form.input(nameField);
         content.add(nameField);
         styleErrorLabel(nameErrorLabel);
         content.add(nameErrorLabel);
@@ -94,11 +86,9 @@ public class AddCustomerDialog extends JDialog {
 
         // Phone
         content.add(createFieldLabel("Phone Number * (10 Digits)"));
-        content.add(Box.createVerticalStrut(4));
+        content.add(Box.createVerticalStrut(6));
         phoneField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. 9812345678");
-        phoneField.setPreferredSize(new Dimension(320, 38));
-        phoneField.setMaximumSize(new Dimension(320, 38));
-        phoneField.setAlignmentX(0.0f);
+        Form.input(phoneField);
         content.add(phoneField);
         styleErrorLabel(phoneErrorLabel);
         content.add(phoneErrorLabel);
@@ -106,47 +96,27 @@ public class AddCustomerDialog extends JDialog {
 
         // Email
         content.add(createFieldLabel("Email Address (Optional)"));
-        content.add(Box.createVerticalStrut(4));
+        content.add(Box.createVerticalStrut(6));
         emailField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. priya@example.com");
-        emailField.setPreferredSize(new Dimension(320, 38));
-        emailField.setMaximumSize(new Dimension(320, 38));
-        emailField.setAlignmentX(0.0f);
+        Form.input(emailField);
         content.add(emailField);
         styleErrorLabel(emailErrorLabel);
         content.add(emailErrorLabel);
         content.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Buttons
-        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.SPACE_8, 0));
+        JPanel buttonRow = new ChipRow(Theme.SPACE_8, true);
         buttonRow.setOpaque(false);
         buttonRow.setAlignmentX(0.0f);
 
-        cancelBtn = new JButton("Cancel");
-        cancelBtn.setFont(Theme.FONT_BODY);
-        cancelBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        cancelBtn = AppButton.secondary("Cancel");
         cancelBtn.addActionListener(e -> dispose());
         buttonRow.add(cancelBtn);
 
-        saveBtn = new JButton("Save & Select") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isEnabled() ? (getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD) : Theme.CARD_BORDER);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        saveBtn.setFont(Theme.FONT_BODY_BOLD);
-        saveBtn.setForeground(Color.WHITE);
-        saveBtn.setContentAreaFilled(false);
-        saveBtn.setBorderPainted(false);
-        saveBtn.setFocusPainted(false);
-        saveBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        saveBtn.setPreferredSize(new Dimension(130, 38));
+        saveBtn = AppButton.primary("Save & Select");
         saveBtn.addActionListener(e -> onSave());
         buttonRow.add(saveBtn);
+        getRootPane().setDefaultButton(saveBtn);
 
         content.add(buttonRow);
         add(content, BorderLayout.CENTER);
@@ -161,13 +131,13 @@ public class AddCustomerDialog extends JDialog {
                 emailField.getText().trim()
         );
 
-        saveBtn.setEnabled(false);
-        saveBtn.setText("Saving...");
+        ((AppButton) saveBtn).setLoading(true);
+        saveBtn.setText("Saving…");
 
         Ui.async(
                 () -> customerService.createCustomer(customer),
                 saved -> {
-                    saveBtn.setEnabled(true);
+                    ((AppButton) saveBtn).setLoading(false);
                     saveBtn.setText("Save & Select");
                     dispose();
                     if (onCustomerSaved != null) {
@@ -175,7 +145,7 @@ public class AddCustomerDialog extends JDialog {
                     }
                 },
                 error -> {
-                    saveBtn.setEnabled(true);
+                    ((AppButton) saveBtn).setLoading(false);
                     saveBtn.setText("Save & Select");
                     if (error instanceof ValidationException) {
                         ValidationException ve = (ValidationException) error;

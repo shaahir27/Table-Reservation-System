@@ -87,7 +87,15 @@ public class SettingDAO {
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, value);
             ps.setString(2, key);
-            ps.executeUpdate();
+            int rows = ps.executeUpdate();
+            if (rows == 0) {
+                String ins = "INSERT INTO app_setting (setting_key, setting_value, description) VALUES (?, ?, 'Metadata')";
+                try (PreparedStatement ips = con.prepareStatement(ins)) {
+                    ips.setString(1, key);
+                    ips.setString(2, value);
+                    ips.executeUpdate();
+                }
+            }
         } catch (SQLException e) {
             throw OracleErrorMapper.map(e, "SettingDAO.update");
         }

@@ -6,6 +6,7 @@ import db.DatabaseConnection;
 import exception.AppException;
 import exception.ValidationException;
 import model.AppUser;
+import model.AuditEntry;
 import security.AuthContext;
 import security.PasswordHasher;
 import security.PasswordPolicy;
@@ -199,5 +200,46 @@ public class UserService {
         } catch (SQLException e) {
             throw OracleErrorMapper.map(e, "UserService.reactivateUser.conn");
         }
+    }
+
+    public void updateUserProfile(int userId, String fullName, Role newRole, boolean active, char[] newPassword) {
+        auth.require(Permission.USER_MANAGE);
+        if (fullName == null || fullName.trim().length() < 2) {
+            throw new ValidationException("Full name must be at least 2 characters.");
+        }
+        AppUser user = userDAO.findById(userId)
+                .orElseThrow(() -> new ValidationException("User not found."));
+
+        // 1. Update Full Name if changed
+        if (!fullName.trim().equals(user.getFullName())) {
+            userDAO.updateFullName(userId, fullName.trim());
+            auditDAO.log(auth.currentUser() != null ? auth.currentUser().getUserId() : null,
+                    "USER_UPDATED", "USER", (long) userId,
+                    "Updated full name for " + user.getUsername() + " to '" + fullName.trim() + "'");
+        }
+
+        // 2. Change role if changed
+        if (newRole != null && newRole != user.getRole()) {
+            changeRole(userId, newRole);
+        }
+
+        // 3. Status change if changed
+        if (active != user.isActive()) {
+            if (active) {
+                reactivateUser(userId);
+            } else {
+                deactivateUser(userId);
+            }
+        }
+
+        // 4. Password reset if specified
+        if (newPassword != null && newPassword.length > 0) {
+            resetPassword(userId, newPassword);
+        }
+    }
+
+    public List<AuditEntry> getUserAuditLogs(int userId, int limit) {
+        auth.require(Permission.USER_MANAGE);
+        return auditDAO.findRecent(limit > 0 ? limit : 50, 0, null, userId, null, null);
     }
 }

@@ -19,14 +19,15 @@ import javax.swing.SwingConstants;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagLayout;
+import java.awt.LinearGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
-import java.util.function.Consumer;
 
 /**
  * Full-screen frosted lock overlay displayed on the window's glass pane when idle or locked.
@@ -61,39 +62,73 @@ public class LockOverlay extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int w = getWidth();
+                int h = getHeight();
+
+                // Multi-stage soft drop shadow
+                for (int i = 1; i <= 4; i++) {
+                    g2.setColor(new Color(0, 0, 0, 10 * i));
+                    g2.fillRoundRect(4 - i, 4 - i, w - 8 + i * 2, h - 8 + i * 2, 24, 24);
+                }
+
+                // White Card Body
                 g2.setColor(Theme.CARD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 24, 24);
+                g2.fillRoundRect(0, 0, w, h, 22, 22);
+
+                // Top Luxury Gold Accent Bar (4px)
+                LinearGradientPaint goldBar = new LinearGradientPaint(
+                        0, 0, w, 0,
+                        new float[]{0.0f, 0.5f, 1.0f},
+                        new Color[]{
+                                new Color(212, 175, 55),
+                                new Color(200, 150, 62),
+                                new Color(160, 115, 40)
+                        }
+                );
+                g2.setPaint(goldBar);
+                g2.fillRoundRect(0, 0, w, 5, 22, 22);
+                g2.fillRect(0, 2, w, 3);
+
+                // Card Border
                 g2.setColor(Theme.CARD_BORDER);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 24, 24);
+                g2.drawRoundRect(0, 0, w - 1, h - 1, 22, 22);
+
                 g2.dispose();
             }
         };
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(40, 40, 36, 40));
-        card.setPreferredSize(new Dimension(380, 420));
-        card.setMaximumSize(new Dimension(380, 420));
+        card.setBorder(BorderFactory.createEmptyBorder(36, 40, 36, 40));
+        card.setPreferredSize(new Dimension(400, 440));
+        card.setMaximumSize(new Dimension(400, 440));
 
-        // Avatar Circle
+        // Avatar Circle with Gold Border
         JPanel avatar = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int size = Math.min(getWidth(), getHeight());
+                int x = (getWidth() - size) / 2;
+                int y = (getHeight() - size) / 2;
+
+                // Gold ring
                 g2.setColor(Theme.ACCENT_GOLD);
-                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.fillOval(x, y, size, size);
+
                 g2.setColor(Color.WHITE);
-                g2.setFont(Theme.FONT_TITLE);
+                g2.setFont(new Font(Theme.FONT_TITLE.getFamily(), Font.BOLD, 22));
                 String initials = getInitials();
                 var fm = g2.getFontMetrics();
-                int x = (getWidth() - fm.stringWidth(initials)) / 2;
-                int y = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
-                g2.drawString(initials, x, y);
+                int tx = (getWidth() - fm.stringWidth(initials)) / 2;
+                int ty = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+                g2.drawString(initials, tx, ty);
                 g2.dispose();
             }
         };
-        avatar.setPreferredSize(new Dimension(64, 64));
-        avatar.setMaximumSize(new Dimension(64, 64));
+        avatar.setPreferredSize(new Dimension(68, 68));
+        avatar.setMaximumSize(new Dimension(68, 68));
         avatar.setOpaque(false);
         avatar.setAlignmentX(0.5f);
 
@@ -102,17 +137,19 @@ public class LockOverlay extends JPanel {
         nameLabel.setForeground(Theme.TEXT_PRIMARY);
         nameLabel.setAlignmentX(0.5f);
 
-        JLabel statusLabel = new JLabel("Session Locked", SwingConstants.CENTER);
-        statusLabel.setFont(Theme.FONT_BODY);
+        JLabel statusLabel = new JLabel("Workstation Locked • Enter Password to Resume", SwingConstants.CENTER);
+        statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         statusLabel.setForeground(Theme.TEXT_MUTED);
         statusLabel.setAlignmentX(0.5f);
 
         passwordField = new JPasswordField();
         passwordField.setFont(Theme.FONT_BODY);
-        passwordField.setPreferredSize(new Dimension(300, 42));
-        passwordField.setMaximumSize(new Dimension(300, 42));
-        passwordField.putClientProperty(FlatClientProperties.STYLE, "showRevealButton: true");
-        passwordField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Enter your password");
+        passwordField.setPreferredSize(new Dimension(320, 44));
+        passwordField.setMaximumSize(new Dimension(320, 44));
+        passwordField.putClientProperty(FlatClientProperties.TEXT_FIELD_LEADING_ICON,
+                AuthIcons.lockIcon(18, new Color(148, 163, 184)));
+        passwordField.putClientProperty(FlatClientProperties.STYLE, "arc: 12; margin: 2,6,2,6; showRevealButton: true;");
+        passwordField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Enter your account password");
         passwordField.setAlignmentX(0.5f);
         passwordField.addKeyListener(new KeyAdapter() {
             @Override
@@ -124,30 +161,52 @@ public class LockOverlay extends JPanel {
         });
 
         errorLabel = new JLabel("", SwingConstants.CENTER);
-        errorLabel.setFont(Theme.FONT_SMALL);
+        errorLabel.setFont(Theme.FONT_SMALL_BOLD);
         errorLabel.setForeground(Theme.DANGER);
         errorLabel.setVisible(false);
         errorLabel.setAlignmentX(0.5f);
 
-        unlockButton = new JButton("Unlock") {
+        unlockButton = new JButton("Unlock Workstation  ➔") {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover() ? Theme.ACCENT_GOLD_HOVER : Theme.ACCENT_GOLD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                int w = getWidth();
+                int h = getHeight();
+
+                if (!isEnabled()) {
+                    g2.setColor(new Color(148, 163, 184));
+                    g2.fillRoundRect(0, 0, w, h, 14, 14);
+                } else {
+                    Color topColor = getModel().isRollover() ? new Color(225, 185, 75) : Theme.ACCENT_GOLD;
+                    Color bottomColor = getModel().isRollover() ? Theme.ACCENT_GOLD : Theme.ACCENT_GOLD_HOVER;
+                    if (getModel().isPressed()) {
+                        topColor = new Color(165, 120, 40);
+                        bottomColor = new Color(135, 95, 30);
+                    }
+                    LinearGradientPaint btnGrad = new LinearGradientPaint(
+                            0, 0, 0, h,
+                            new float[]{0.0f, 1.0f},
+                            new Color[]{topColor, bottomColor}
+                    );
+                    g2.setPaint(btnGrad);
+                    g2.fillRoundRect(0, 0, w, h, 14, 14);
+
+                    g2.setColor(new Color(255, 255, 255, 45));
+                    g2.fillRoundRect(0, 0, w, h / 2, 14, 14);
+                }
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
-        unlockButton.setFont(Theme.FONT_BODY_BOLD);
+        unlockButton.setFont(new Font("SansSerif", Font.BOLD, 13));
         unlockButton.setForeground(Color.WHITE);
         unlockButton.setContentAreaFilled(false);
         unlockButton.setBorderPainted(false);
         unlockButton.setFocusPainted(false);
         unlockButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        unlockButton.setPreferredSize(new Dimension(300, 42));
-        unlockButton.setMaximumSize(new Dimension(300, 42));
+        unlockButton.setPreferredSize(new Dimension(320, 44));
+        unlockButton.setMaximumSize(new Dimension(320, 44));
         unlockButton.setAlignmentX(0.5f);
         unlockButton.addActionListener(e -> performUnlock());
 
@@ -167,7 +226,7 @@ public class LockOverlay extends JPanel {
         card.add(nameLabel);
         card.add(Box.createVerticalStrut(Theme.SPACE_4));
         card.add(statusLabel);
-        card.add(Box.createVerticalStrut(Theme.SPACE_24));
+        card.add(Box.createVerticalStrut(Theme.SPACE_20));
         card.add(passwordField);
         card.add(Box.createVerticalStrut(Theme.SPACE_8));
         card.add(errorLabel);
@@ -181,9 +240,9 @@ public class LockOverlay extends JPanel {
 
     @Override
     protected void paintComponent(Graphics g) {
-        // Scrim background darkening the entire app
+        // Deep obsidian glass scrim darkening background
         Graphics2D g2 = (Graphics2D) g.create();
-        g2.setColor(new Color(15, 23, 42, 215));
+        g2.setColor(new Color(10, 14, 23, 225));
         g2.fillRect(0, 0, getWidth(), getHeight());
         g2.dispose();
         super.paintComponent(g);

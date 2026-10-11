@@ -24,6 +24,9 @@ public class OracleErrorMapper {
                 if (message.contains("UQ_ACTIVE_BOOKING")) {
                     return new BookingConflictException("The requested table is already reserved for this date and time slot.");
                 }
+                if (message.contains("UQ_ACTIVE_WAITLIST")) {
+                    return new ValidationException("Customer already has an active waitlist entry for this date and time slot.");
+                }
                 if (message.contains("UQ_CUSTOMER_PHONE")) {
                     return new ValidationException("Phone number is already registered to another customer.");
                 }

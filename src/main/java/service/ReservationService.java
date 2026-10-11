@@ -11,7 +11,11 @@ import exception.BookingConflictException;
 import exception.ValidationException;
 import model.Customer;
 import model.DashboardStats;
+import model.ReconfirmStatus;
 import model.Reservation;
+import model.ReservationDetail;
+import model.ReservationSource;
+import model.ReservationStatus;
 import model.RestaurantTable;
 import model.TableAvailability;
 import model.TableState;
@@ -28,6 +32,7 @@ import util.ValidationUtil;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,7 +41,7 @@ import java.util.Optional;
 
 /**
  * Core business service managing reservations, table recommendations,
- * and concurrency-safe double-booking prevention transactions.
+ * lifecycle state transitions (P3), and automated waitlist recovery (P4).
  */
 public class ReservationService {
     private final ReservationDAO reservationDAO;
@@ -45,6 +50,7 @@ public class ReservationService {
     private final TimeSlotDAO timeSlotDAO;
     private final AuditDAO auditDAO;
     private final AuthContext auth;
+    private RecoveryService recoveryService;
 
     // In-memory cache for static time slots
     private List<TimeSlot> cachedSlots = null;
@@ -61,12 +67,23 @@ public class ReservationService {
     public ReservationService(ReservationDAO reservationDAO, TableDAO tableDAO, 
                               CustomerDAO customerDAO, TimeSlotDAO timeSlotDAO,
                               AuditDAO auditDAO, AuthContext auth) {
+        this(reservationDAO, tableDAO, customerDAO, timeSlotDAO, auditDAO, auth, null);
+    }
+
+    public ReservationService(ReservationDAO reservationDAO, TableDAO tableDAO, 
+                              CustomerDAO customerDAO, TimeSlotDAO timeSlotDAO,
+                              AuditDAO auditDAO, AuthContext auth, RecoveryService recoveryService) {
         this.reservationDAO = reservationDAO;
         this.tableDAO = tableDAO;
         this.customerDAO = customerDAO;
         this.timeSlotDAO = timeSlotDAO;
         this.auditDAO = auditDAO != null ? auditDAO : new AuditDAO();
         this.auth = auth != null ? auth : Session.getInstance();
+        this.recoveryService = recoveryService;
+    }
+
+    public void setRecoveryService(RecoveryService recoveryService) {
+        this.recoveryService = recoveryService;
     }
 
     /**
@@ -120,10 +137,6 @@ public class ReservationService {
     /**
      * Pure function recommending the best-fit table among candidates.
      * Rule: Picks smallest capacity >= guests; ties broken by lowest table_number.
-     *
-     * @param candidates Bookable tables with capacity >= guests
-     * @param guests     Number of guests
-     * @return TableAvailability with recommended flag, or null if none fit
      */
     public TableAvailability recommendTable(List<RestaurantTable> candidates, int guests) {
         if (candidates == null || candidates.isEmpty()) {
@@ -145,7 +158,6 @@ public class ReservationService {
     public Reservation bookTable(int customerId, int tableId, LocalDate date, TimeSlot slot, int guests) {
         auth.require(Permission.RESERVATION_CREATE);
 
-        // Retrieve and pre-validate table & customer
         Customer customer = customerDAO.getCustomerById(customerId);
         if (customer == null) {
             throw new ValidationException("Selected customer does not exist.");
@@ -178,10 +190,13 @@ public class ReservationService {
                     throw new BookingConflictException(lockedTable.getTableNumber(), date, slot.getLabel());
                 }
 
-                // 4. Insert reservation. Oracle's UQ_ACTIVE_BOOKING function-based unique index is the real guarantee
+                // 4. Insert reservation
                 Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
-                Reservation newReservation = new Reservation(customerId, tableId, date, slot.getSlotId(), guests);
-                newReservation.setCreatedBy(userId);
+                Reservation newReservation = new Reservation(
+                        0, customerId, tableId, date, slot.getSlotId(), guests,
+                        ReservationStatus.CONFIRMED, DbClock.localDateTime(), userId,
+                        ReservationSource.BOOKING, null, null, ReconfirmStatus.PENDING
+                );
                 Reservation created = reservationDAO.createReservation(con, newReservation);
 
                 // 5. Transactional audit log entry in the same transaction
@@ -208,50 +223,261 @@ public class ReservationService {
     }
 
     /**
-     * Cancels an active reservation. The unique index slot becomes immediately freed,
-     * while the record is preserved in the database for auditing.
+     * Seats an arriving party (P3 Lifecycle transition: CONFIRMED or HELD -> SEATED).
      */
-    public void cancelReservation(int reservationId) {
-        auth.require(Permission.RESERVATION_CANCEL);
-        boolean success = reservationDAO.cancelReservation(reservationId);
-        if (!success) {
-            throw new ValidationException("Reservation RES" + reservationId + " could not be cancelled. It may already be cancelled or completed.");
+    public void seat(int reservationId) {
+        auth.require(Permission.RESERVATION_SEAT);
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                Optional<Reservation> opt = reservationDAO.getReservationById(con, reservationId);
+                if (opt.isEmpty()) {
+                    throw new ValidationException("Reservation RES" + reservationId + " does not exist.");
+                }
+                Reservation res = opt.get();
+                if (!res.getStatus().canTransitionTo(ReservationStatus.SEATED)) {
+                    throw new ValidationException("Cannot seat reservation in status " + res.getStatus());
+                }
+
+                LocalDateTime now = DbClock.localDateTime();
+                reservationDAO.seat(con, reservationId, now);
+
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+                auditDAO.log(con, userId, "RES_SEATED", "RESERVATION", (long) reservationId,
+                        "Guest arrived and seated at Table #" + res.getTableId());
+
+                con.commit();
+                AppLog.info("Seated reservation RES" + reservationId);
+            } catch (SQLException e) {
+                con.rollback();
+                throw OracleErrorMapper.map(e, "ReservationService.seat");
+            }
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.seat");
         }
-        Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
-        auditDAO.log(userId, "RES_CANCELLED", "RESERVATION", (long) reservationId, "Cancelled reservation RES" + reservationId);
-        AppLog.info("Cancelled reservation RES" + reservationId);
     }
 
     /**
-     * Marks an eligible confirmed reservation as COMPLETED.
+     * Marks an absent confirmed party as NO_SHOW and immediately triggers Slot Recovery (P3+P4).
+     */
+    public void markNoShow(int reservationId) {
+        auth.require(Permission.RESERVATION_NOSHOW);
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                Optional<Reservation> opt = reservationDAO.getReservationById(con, reservationId);
+                if (opt.isEmpty()) {
+                    throw new ValidationException("Reservation RES" + reservationId + " does not exist.");
+                }
+                Reservation res = opt.get();
+                if (!res.getStatus().canTransitionTo(ReservationStatus.NO_SHOW)) {
+                    throw new ValidationException("Cannot mark as NO_SHOW from status " + res.getStatus());
+                }
+
+                // 1. Update status to NO_SHOW (frees slot in UQ_ACTIVE_BOOKING)
+                reservationDAO.markNoShow(con, reservationId);
+
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+                auditDAO.log(con, userId, "RES_NO_SHOW", "RESERVATION", (long) reservationId,
+                        "Marked as NO_SHOW. Table #" + res.getTableId() + " released.");
+
+                // 2. Trigger slot refill within same transaction if recoveryService is active
+                if (recoveryService != null) {
+                    recoveryService.fillSlot(con, res.getReservationDate(), res.getSlotId());
+                }
+
+                con.commit();
+                AppLog.info("Marked reservation RES" + reservationId + " as NO_SHOW and refilled slot.");
+            } catch (SQLException e) {
+                con.rollback();
+                throw OracleErrorMapper.map(e, "ReservationService.markNoShow");
+            }
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.markNoShow");
+        }
+    }
+
+    /**
+     * Marks a seated party as COMPLETED upon concluding their dining experience (P3 Lifecycle).
+     */
+    public void complete(int reservationId) {
+        auth.require(Permission.RESERVATION_SEAT);
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                Optional<Reservation> opt = reservationDAO.getReservationById(con, reservationId);
+                if (opt.isEmpty()) {
+                    throw new ValidationException("Reservation RES" + reservationId + " does not exist.");
+                }
+                Reservation res = opt.get();
+                if (!res.getStatus().canTransitionTo(ReservationStatus.COMPLETED)) {
+                    throw new ValidationException("Cannot complete reservation from status " + res.getStatus() + ". Only SEATED bookings can be completed.");
+                }
+
+                reservationDAO.markCompleted(con, reservationId);
+
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+                auditDAO.log(con, userId, "RES_COMPLETED", "RESERVATION", (long) reservationId,
+                        "Table #" + res.getTableId() + " service completed.");
+
+                con.commit();
+                AppLog.info("Completed reservation RES" + reservationId);
+            } catch (SQLException e) {
+                con.rollback();
+                throw OracleErrorMapper.map(e, "ReservationService.complete");
+            }
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.complete");
+        }
+    }
+
+    /**
+     * Backward-compatible alias for complete().
      */
     public void markCompleted(int reservationId) {
-        Optional<Reservation> opt = reservationDAO.getReservationById(reservationId);
-        if (opt.isEmpty()) {
-            throw new ValidationException("Reservation RES" + reservationId + " does not exist.");
-        }
+        complete(reservationId);
+    }
 
-        Reservation res = opt.get();
+    /**
+     * Seats an immediate walk-in party into the current ongoing slot (P3 Lifecycle).
+     */
+    public Reservation walkIn(int customerId, int guests, String notes) {
+        auth.require(Permission.RESERVATION_CREATE);
+
         LocalDate today = DbClock.today();
         LocalTime now = DbClock.localTime();
+        List<TimeSlot> slots = getTimeSlots();
 
-        TimeSlot slot = getTimeSlots().stream()
-                .filter(s -> s.getSlotId() == res.getSlotId())
-                .findFirst()
-                .orElse(null);
-
-        boolean eligible = res.getReservationDate().isBefore(today) ||
-                (res.getReservationDate().isEqual(today) && slot != null && !slot.getStartTime().isAfter(now));
-
-        if (!eligible) {
-            throw new ValidationException("Only past reservations or reservations whose seating has begun can be marked as COMPLETED.");
+        // Find active ongoing or upcoming slot for today
+        TimeSlot currentSlot = null;
+        for (TimeSlot s : slots) {
+            if (!now.isBefore(s.getStartTime()) && now.isBefore(s.getEndTime())) {
+                currentSlot = s;
+                break;
+            }
+        }
+        if (currentSlot == null) {
+            // Pick next upcoming slot today if any
+            for (TimeSlot s : slots) {
+                if (now.isBefore(s.getStartTime())) {
+                    currentSlot = s;
+                    break;
+                }
+            }
+        }
+        if (currentSlot == null) {
+            throw new ValidationException("No active dining slots remaining today for walk-in seating.");
         }
 
-        boolean success = reservationDAO.markCompleted(reservationId);
-        if (!success) {
-            throw new ValidationException("Failed to update status to COMPLETED.");
+        // Find available tables fitting party
+        List<RestaurantTable> candidates = tableDAO.getAvailableTables(today, currentSlot.getSlotId(), guests);
+        if (candidates.isEmpty()) {
+            throw new ValidationException("No available tables fit " + guests + " guests for slot " + currentSlot.getLabel());
         }
-        AppLog.info("Marked reservation RES" + reservationId + " as COMPLETED.");
+
+        TableAvailability rec = recommendTable(candidates, guests);
+        if (rec == null || rec.getTable() == null) {
+            throw new ValidationException("No suitable table found.");
+        }
+        RestaurantTable table = rec.getTable();
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                tableDAO.lockTable(con, table.getTableId());
+                if (reservationDAO.isSlotTaken(con, table.getTableId(), today, currentSlot.getSlotId())) {
+                    throw new BookingConflictException("Table was just occupied by another booking.");
+                }
+
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+                LocalDateTime seatedNow = DbClock.localDateTime();
+
+                Reservation walkInRes = new Reservation(
+                        0, customerId, table.getTableId(), today, currentSlot.getSlotId(), guests,
+                        ReservationStatus.SEATED, seatedNow, userId,
+                        ReservationSource.WALK_IN, seatedNow, null, ReconfirmStatus.CONFIRMED
+                );
+                Reservation created = reservationDAO.createReservation(con, walkInRes);
+
+                auditDAO.log(con, userId, "WALK_IN_SEATED", "RESERVATION", (long) created.getReservationId(),
+                        "Walk-in (" + guests + " guests) seated immediately on Table " + table.getTableNumber());
+
+                con.commit();
+                AppLog.info("Walk-in seated: RES" + created.getReservationId() + " on Table " + table.getTableNumber());
+                return created;
+            } catch (SQLException e) {
+                con.rollback();
+                throw OracleErrorMapper.map(e, "ReservationService.walkIn");
+            }
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.walkIn");
+        }
+    }
+
+    /**
+     * Cancels an active reservation and triggers the Slot Recovery Loop to offer the table to waitlist.
+     */
+    public void cancelReservation(int reservationId) {
+        auth.require(Permission.RESERVATION_CANCEL);
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                Optional<Reservation> opt = reservationDAO.getReservationById(con, reservationId);
+                if (opt.isEmpty()) {
+                    throw new ValidationException("Reservation RES" + reservationId + " does not exist.");
+                }
+                Reservation res = opt.get();
+                if (!res.getStatus().canTransitionTo(ReservationStatus.CANCELLED)) {
+                    throw new ValidationException("Cannot cancel reservation in status " + res.getStatus());
+                }
+
+                reservationDAO.cancelReservation(con, reservationId);
+
+                Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+                auditDAO.log(con, userId, "RES_CANCELLED", "RESERVATION", (long) reservationId,
+                        "Cancelled reservation RES" + reservationId);
+
+                // Slot recovery refill in same transaction
+                if (recoveryService != null) {
+                    recoveryService.fillSlot(con, res.getReservationDate(), res.getSlotId());
+                }
+
+                con.commit();
+                AppLog.info("Cancelled reservation RES" + reservationId + " and refilled slot.");
+            } catch (SQLException e) {
+                con.rollback();
+                throw OracleErrorMapper.map(e, "ReservationService.cancelReservation");
+            }
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.cancelReservation");
+        }
+    }
+
+    /**
+     * Updates reconfirmation status.
+     */
+    public void updateReconfirmStatus(int reservationId, ReconfirmStatus status) {
+        auth.require(Permission.RESERVATION_SEAT);
+
+        try (Connection con = DatabaseConnection.getConnection()) {
+            reservationDAO.updateReconfirmStatus(con, reservationId, status);
+            Integer userId = auth.currentUser() != null ? auth.currentUser().getUserId() : null;
+            auditDAO.log(con, userId, "RECONFIRM_UPDATE", "RESERVATION", (long) reservationId,
+                    "Reconfirmation set to " + status.name());
+        } catch (SQLException e) {
+            throw OracleErrorMapper.map(e, "ReservationService.updateReconfirmStatus");
+        }
+    }
+
+    /**
+     * Retrieves all reservations for a given service date (Service Board).
+     */
+    public List<ReservationDetail> getReservationsByDate(LocalDate date) {
+        return reservationDAO.getReservationsByDate(date);
     }
 
     /**
@@ -276,13 +502,10 @@ public class ReservationService {
     }
 
     /**
-     * Computes dashboard statistics: today's count, upcoming bookings, cancelled count,
-     * available tables at next slot, and top upcoming reservations feed.
+     * Computes dashboard statistics.
      */
     public DashboardStats getDashboardStats() {
-        int todayCount = reservationDAO.getTodayCount();
-        int upcomingCount = reservationDAO.getUpcomingCount();
-        int cancelledCount = reservationDAO.getCancelledCount();
+        ReservationDAO.DashboardCounts counts = reservationDAO.getDashboardCounts();
 
         LocalDate today = DbClock.today();
         LocalTime now = DbClock.localTime();
@@ -314,6 +537,20 @@ public class ReservationService {
         }
 
         List<model.ReservationDetail> upcoming = reservationDAO.getUpcomingReservations(8);
-        return new DashboardStats(todayCount, freeTables, slotLabel, upcomingCount, cancelledCount, upcoming);
+        return new DashboardStats(counts.todayCount(), freeTables, slotLabel, counts.upcomingCount(), counts.cancelledCount(), counts.recoveredCount(), upcoming);
+    }
+
+    /**
+     * Retrieves total recovered covers saved by the Slot Recovery Loop.
+     */
+    public int getRecoveredCoversCount() {
+        return reservationDAO.getRecoveredCoversCount();
+    }
+
+    /**
+     * Retrieves all reservations for a specific customer.
+     */
+    public List<ReservationDetail> getReservationsByCustomer(int customerId) {
+        return reservationDAO.getReservationsByCustomerId(customerId);
     }
 }

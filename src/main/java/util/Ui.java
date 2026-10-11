@@ -34,7 +34,11 @@ public class Ui {
                     }
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    AppLog.error("Asynchronous UI task failed: " + cause.getMessage(), cause);
+                    if (cause instanceof exception.AuthenticationException || cause instanceof exception.ValidationException) {
+                        AppLog.warning("Asynchronous UI task: " + cause.getMessage());
+                    } else {
+                        AppLog.error("Asynchronous UI task failed: " + cause.getMessage(), cause);
+                    }
                     if (onError != null) {
                         onError.accept(cause);
                     }

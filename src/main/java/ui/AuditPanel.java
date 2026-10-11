@@ -2,26 +2,26 @@ package ui;
 
 import model.AuditEntry;
 import service.AuditService;
+import ui.components.ChipRow;
+import ui.components.AppButton;
+import ui.components.Card;
+import ui.components.ChipToggle;
 import ui.components.DateSelector;
+import ui.components.Form;
+import ui.components.StyledTable;
 import ui.components.Toast;
 import util.Ui;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -55,47 +55,69 @@ public class AuditPanel extends BasePanel {
         initUi();
     }
 
+    private void applyQuickRange(int days) {
+        fromDateSelector.setDate(util.DbClock.today().minusDays(days));
+        toDateSelector.setDate(util.DbClock.today());
+        currentPage = 1;
+        loadData();
+    }
+
     private void initUi() {
         JPanel mainLayout = new JPanel(new BorderLayout(0, Theme.SPACE_16));
         mainLayout.setOpaque(false);
 
         // Filter Bar
-        JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
-        filterBar.setOpaque(false);
+        JPanel filterBar = new Card(14, Theme.SPACE_20);
+        filterBar.setLayout(ChipRow.layout(12, false));
 
-        filterBar.add(new JLabel("Action:"));
+        filterBar.add(Form.label("Action"));
         String[] actions = {
                 "ALL", "LOGIN_OK", "LOGIN_FAILED", "LOGIN_LOCKED", "LOGOUT",
-                "RES_CREATED", "RES_CANCELLED",
-                "TABLE_CREATED", "TABLE_UPDATED", "TABLE_DELETED",
-                "CUSTOMER_CREATED", "CUSTOMER_UPDATED", "CUSTOMER_DELETE",
+                "RES_CREATED", "RES_SEATED", "RES_COMPLETED", "RES_NO_SHOW", "RES_CANCELLED", "WALK_IN_SEATED",
+                "WAITLIST_JOIN", "WAITLIST_CANCEL", "OFFER_MADE", "OFFER_ACCEPTED", "OFFER_DECLINED", "RECONFIRM_UPDATE",
+                "TABLE_CREATED", "TABLE_UPDATED", "TABLE_DELETED", "FLOOR_PLAN_UPDATED",
+                "CUSTOMER_CREATED", "CUSTOMER_UPDATED", "CUSTOMER_DELETED",
                 "USER_CREATED", "USER_ROLE_CHANGED", "USER_DEACTIVATED", "USER_REACTIVATED",
                 "PWD_CHANGED", "PWD_RESET", "SETTING_CHANGED"
         };
         actionCombo = new JComboBox<>(actions);
-        actionCombo.setPreferredSize(new Dimension(160, 36));
+        Form.input(actionCombo, 210);
         filterBar.add(actionCombo);
 
-        filterBar.add(new JLabel("From:"));
-        fromDateSelector = new DateSelector();
+        filterBar.add(Form.label("From"));
+        fromDateSelector = new DateSelector(true, false);
         fromDateSelector.setDate(util.DbClock.today().minusDays(7));
         filterBar.add(fromDateSelector);
 
-        filterBar.add(new JLabel("To:"));
-        toDateSelector = new DateSelector();
+        filterBar.add(Form.label("To"));
+        toDateSelector = new DateSelector(true, false);
         toDateSelector.setDate(util.DbClock.today());
         filterBar.add(toDateSelector);
 
-        JButton filterBtn = new JButton("Filter");
-        filterBtn.setPreferredSize(new Dimension(80, 36));
+        // quick ranges set both dates and re-run the filter
+        ChipToggle todayChip = new ChipToggle("Today", ChipToggle.Style.DARK).minWidth(70);
+        ChipToggle weekChip = new ChipToggle("Last 7 days", ChipToggle.Style.DARK).minWidth(70);
+        ChipToggle monthChip = new ChipToggle("Last 30 days", ChipToggle.Style.DARK).minWidth(70);
+        javax.swing.ButtonGroup rangeGroup = new javax.swing.ButtonGroup();
+        rangeGroup.add(todayChip);
+        rangeGroup.add(weekChip);
+        rangeGroup.add(monthChip);
+        weekChip.setSelected(true);
+        todayChip.addActionListener(e -> applyQuickRange(0));
+        weekChip.addActionListener(e -> applyQuickRange(7));
+        monthChip.addActionListener(e -> applyQuickRange(30));
+        filterBar.add(todayChip);
+        filterBar.add(weekChip);
+        filterBar.add(monthChip);
+
+        JButton filterBtn = AppButton.primary("Apply Filters");
         filterBtn.addActionListener(e -> {
             currentPage = 1;
             loadData();
         });
         filterBar.add(filterBtn);
 
-        JButton resetBtn = new JButton("Reset");
-        resetBtn.setPreferredSize(new Dimension(80, 36));
+        JButton resetBtn = AppButton.secondary("Reset");
         resetBtn.addActionListener(e -> {
             actionCombo.setSelectedIndex(0);
             fromDateSelector.setDate(util.DbClock.today().minusDays(7));
@@ -116,18 +138,9 @@ public class AuditPanel extends BasePanel {
             }
         };
 
-        auditTable = new JTable(tableModel);
-        auditTable.setFont(Theme.FONT_BODY);
-        auditTable.setRowHeight(38);
+        auditTable = new StyledTable(tableModel).emptyMessage("No audit entries match these filters.");
 
         // Customize column widths
-        auditTable.getColumnModel().getColumn(0).setPreferredWidth(60);
-        auditTable.getColumnModel().getColumn(1).setPreferredWidth(140);
-        auditTable.getColumnModel().getColumn(2).setPreferredWidth(120);
-        auditTable.getColumnModel().getColumn(3).setPreferredWidth(110);
-        auditTable.getColumnModel().getColumn(4).setPreferredWidth(90);
-        auditTable.getColumnModel().getColumn(5).setPreferredWidth(70);
-        auditTable.getColumnModel().getColumn(6).setPreferredWidth(320);
 
         // Action color renderer
         auditTable.getColumnModel().getColumn(2).setCellRenderer(new DefaultTableCellRenderer() {
@@ -150,18 +163,18 @@ public class AuditPanel extends BasePanel {
 
         JScrollPane scrollPane = new JScrollPane(auditTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(Theme.CARD_BORDER, 1));
+        scrollPane.getViewport().setBackground(Theme.CARD_BG);
         mainLayout.add(scrollPane, BorderLayout.CENTER);
 
         // Pagination Bar
-        JPanel paginationBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        JPanel paginationBar = new ChipRow(12, true);
         paginationBar.setOpaque(false);
 
         pageLabel = new JLabel("Page 1 of 1 (0 entries)");
         pageLabel.setFont(Theme.FONT_SMALL);
         pageLabel.setForeground(Theme.TEXT_MUTED);
 
-        prevBtn = new JButton("◀ Previous");
-        prevBtn.setFont(Theme.FONT_SMALL);
+        prevBtn = AppButton.secondary("‹  Previous").compact();
         prevBtn.setEnabled(false);
         prevBtn.addActionListener(e -> {
             if (currentPage > 1) {
@@ -170,8 +183,7 @@ public class AuditPanel extends BasePanel {
             }
         });
 
-        nextBtn = new JButton("Next ▶");
-        nextBtn.setFont(Theme.FONT_SMALL);
+        nextBtn = AppButton.secondary("Next  ›").compact();
         nextBtn.setEnabled(false);
         nextBtn.addActionListener(e -> {
             int maxPages = Math.max(1, (int) Math.ceil((double) totalCount / PAGE_SIZE));
@@ -226,6 +238,7 @@ public class AuditPanel extends BasePanel {
 
                     int maxPages = Math.max(1, (int) Math.ceil((double) totalCount / PAGE_SIZE));
                     pageLabel.setText(String.format("Page %d of %d (%d total entries)", currentPage, maxPages, totalCount));
+                    if (auditTable instanceof StyledTable st) st.reveal();
                     prevBtn.setEnabled(currentPage > 1);
                     nextBtn.setEnabled(currentPage < maxPages);
                 },
