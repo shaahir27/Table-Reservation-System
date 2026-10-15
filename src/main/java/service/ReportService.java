@@ -3,6 +3,7 @@ package service;
 import dao.ReportDAO;
 import dao.ReportResult;
 import exception.ValidationException;
+import model.analytics.AnalyticsSummary;
 import security.AuthContext;
 import security.Permission;
 import security.Session;
@@ -85,5 +86,16 @@ public class ReportService {
     public ReportResult getWaitlistFunnelReport() {
         auth.require(Permission.REPORT_VIEW);
         return reportDAO.getWaitlistFunnel();
+    }
+
+    public AnalyticsSummary getAnalyticsDashboard(LocalDate fromDate, LocalDate toDate) {
+        auth.require(Permission.REPORT_VIEW);
+        if (fromDate == null || toDate == null) {
+            throw new ValidationException("Both start and end dates are required.");
+        }
+        if (fromDate.isAfter(toDate)) {
+            throw new ValidationException("Start date cannot be after end date.");
+        }
+        return reportDAO.getAnalyticsDashboard(fromDate, toDate);
     }
 }

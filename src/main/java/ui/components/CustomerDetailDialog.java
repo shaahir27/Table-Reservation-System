@@ -35,6 +35,7 @@ import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -94,8 +95,11 @@ public class CustomerDetailDialog extends JDialog {
         this.onUpdated = onUpdated;
         this.onBookReservation = onBookReservation;
 
-        setSize(720, 620);
-        setMinimumSize(new Dimension(640, 500));
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int targetWidth = Math.min(740, (int) (screen.width * 0.85));
+        int targetHeight = Math.min(620, (int) (screen.height * 0.85));
+        setSize(Math.max(600, targetWidth), Math.max(480, targetHeight));
+        setMinimumSize(new Dimension(560, 440));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         // Load enriched tags & notes
@@ -218,6 +222,8 @@ public class CustomerDetailDialog extends JDialog {
 
         // Form fields
         nameField.setText(customer.getName());
+        nameField.setAlignmentX(0.0f);
+        nameField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         Form.input(nameField);
         panel.add(createFieldLabel("Full Name *"));
         panel.add(Box.createVerticalStrut(4));
@@ -227,6 +233,8 @@ public class CustomerDetailDialog extends JDialog {
         panel.add(Box.createVerticalStrut(4));
 
         phoneField.setText(customer.getPhone());
+        phoneField.setAlignmentX(0.0f);
+        phoneField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         Form.input(phoneField);
         panel.add(createFieldLabel("Phone Number * (10 digits)"));
         panel.add(Box.createVerticalStrut(4));
@@ -236,6 +244,8 @@ public class CustomerDetailDialog extends JDialog {
         panel.add(Box.createVerticalStrut(4));
 
         emailField.setText(customer.getEmail() != null ? customer.getEmail() : "");
+        emailField.setAlignmentX(0.0f);
+        emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         Form.input(emailField);
         panel.add(createFieldLabel("Email Address"));
         panel.add(Box.createVerticalStrut(4));

@@ -92,13 +92,13 @@ public class Sidebar extends JPanel {
             addNavItem("Service Board", "SERVICE_BOARD");
             addNavItem("Dashboard", "DASHBOARD");
         }
+        addNavItem("Floor Plan", "TABLES");
         addNavItem("Reservations", "RESERVATIONS");
         addNavItem("Customers", "CUSTOMERS");
 
         if (isManager) {
             navList.add(Box.createVerticalStrut(14));
             addSection("MANAGEMENT");
-            addNavItem("Tables", "TABLES");
             addNavItem("Reports", "REPORTS");
             addNavItem("Staff", "STAFF");
             addNavItem("Audit Log", "AUDIT");

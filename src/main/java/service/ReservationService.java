@@ -345,6 +345,10 @@ public class ReservationService {
      * Seats an immediate walk-in party into the current ongoing slot (P3 Lifecycle).
      */
     public Reservation walkIn(int customerId, int guests, String notes) {
+        return walkIn(customerId, guests, notes, null);
+    }
+
+    public Reservation walkIn(int customerId, int guests, String notes, Integer specificTableId) {
         auth.require(Permission.RESERVATION_CREATE);
 
         LocalDate today = DbClock.today();
@@ -378,11 +382,19 @@ public class ReservationService {
             throw new ValidationException("No available tables fit " + guests + " guests for slot " + currentSlot.getLabel());
         }
 
-        TableAvailability rec = recommendTable(candidates, guests);
-        if (rec == null || rec.getTable() == null) {
-            throw new ValidationException("No suitable table found.");
+        RestaurantTable table;
+        if (specificTableId != null) {
+            table = candidates.stream()
+                    .filter(t -> t.getTableId() == specificTableId)
+                    .findFirst()
+                    .orElseThrow(() -> new ValidationException("Selected table is no longer available or does not fit " + guests + " guests."));
+        } else {
+            TableAvailability rec = recommendTable(candidates, guests);
+            if (rec == null || rec.getTable() == null) {
+                throw new ValidationException("No suitable table found.");
+            }
+            table = rec.getTable();
         }
-        RestaurantTable table = rec.getTable();
 
         try (Connection con = DatabaseConnection.getConnection()) {
             con.setAutoCommit(false);
@@ -415,6 +427,21 @@ public class ReservationService {
         } catch (SQLException e) {
             throw OracleErrorMapper.map(e, "ReservationService.walkIn");
         }
+    }
+
+    /**
+     * Checks if a table has an upcoming reservation booked for any subsequent slot today.
+     */
+    public Optional<TimeSlot> getNextBookedSlotForTable(int tableId, LocalDate date, int currentSlotId) {
+        List<TimeSlot> slots = getTimeSlots();
+        for (TimeSlot s : slots) {
+            if (s.getSlotId() > currentSlotId) {
+                if (reservationDAO.isSlotTaken(tableId, date, s.getSlotId())) {
+                    return Optional.of(s);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /**

@@ -36,6 +36,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -256,15 +257,17 @@ public class ReservationsPanel extends BasePanel {
         scrollPane.getViewport().setBackground(Theme.CARD_BG);
         resultsCard.add(scrollPane, BorderLayout.CENTER);
 
-        // 3. Action bar & Footer (Two-tier clean layout to prevent overlapping)
-        JPanel bottomBar = new JPanel();
-        bottomBar.setLayout(new BoxLayout(bottomBar, BoxLayout.Y_AXIS));
+        // 3. Action bar & Footer (Resilient two-tier layout to prevent overlapping)
+        JPanel bottomBar = new JPanel(new BorderLayout(0, Theme.SPACE_8));
         bottomBar.setOpaque(false);
         bottomBar.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_8, 0, 0, 0));
+        bottomBar.setPreferredSize(new Dimension(0, 68));
+        bottomBar.setMinimumSize(new Dimension(0, 68));
 
         // Sub-row 1: Count and Selection Status
         JPanel statusRow = new JPanel(new BorderLayout(Theme.SPACE_16, 0));
         statusRow.setOpaque(false);
+        statusRow.setPreferredSize(new Dimension(0, 22));
 
         countFooterLabel.setFont(Theme.FONT_BODY_BOLD);
         countFooterLabel.setForeground(Theme.TEXT_PRIMARY);
@@ -274,18 +277,18 @@ public class ReservationsPanel extends BasePanel {
 
         statusRow.add(countFooterLabel, BorderLayout.WEST);
         statusRow.add(actionHintLabel, BorderLayout.EAST);
-        bottomBar.add(statusRow);
-        bottomBar.add(Box.createVerticalStrut(Theme.SPACE_8));
+        bottomBar.add(statusRow, BorderLayout.NORTH);
 
         // Sub-row 2: Action buttons toolbar
         JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.SPACE_8, 0));
         buttonBar.setOpaque(false);
+        buttonBar.setPreferredSize(new Dimension(0, 36));
         buttonBar.add(seatGuestBtn);
         buttonBar.add(markCompletedBtn);
         buttonBar.add(cancelBtn);
         buttonBar.add(viewDetailsBtn);
         buttonBar.add(viewCustomerBtn);
-        bottomBar.add(buttonBar);
+        bottomBar.add(buttonBar, BorderLayout.SOUTH);
 
         resultsCard.add(bottomBar, BorderLayout.SOUTH);
         mainLayout.add(resultsCard, BorderLayout.CENTER);
@@ -427,37 +430,29 @@ public class ReservationsPanel extends BasePanel {
         viewDetailsBtn.setEnabled(true);
         viewCustomerBtn.setEnabled(true);
 
-        // Seat Guest enabled for CONFIRMED and HELD
-        boolean canSeat = (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD);
+        // Seat Guest enabled ONLY for TODAY, for CONFIRMED and HELD
+        boolean isToday = detail.getReservationDate() != null && detail.getReservationDate().equals(util.DbClock.today());
+        boolean canSeat = isToday && (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD);
         seatGuestBtn.setEnabled(canSeat);
 
         // Cancel enabled for CONFIRMED and HELD
         boolean canCancel = (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD);
         cancelBtn.setEnabled(canCancel);
 
-        // Mark Completed enabled for SEATED, or CONFIRMED whose slot has begun
-        boolean canComplete = (status == ReservationStatus.SEATED) ||
-                (status == ReservationStatus.CONFIRMED && (detail.getReservationDate().isBefore(util.DbClock.today()) || isSlotStarted(detail.getSlotLabel())));
+        // Mark Completed enabled ONLY for SEATED bookings (DB trigger enforces CONFIRMED -> SEATED -> COMPLETED)
+        boolean canComplete = (status == ReservationStatus.SEATED);
         markCompletedBtn.setEnabled(canComplete);
 
         if (canSeat) {
             actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (" + status + ") · Ready to Seat Guest or Cancel");
+        } else if (!isToday && (status == ReservationStatus.CONFIRMED || status == ReservationStatus.HELD)) {
+            String dateStr = detail.getReservationDate() != null ? detail.getReservationDate().format(DateTimeFormatter.ofPattern("dd MMM yyyy")) : "N/A";
+            actionHintLabel.setText("Selected " + detail.getDisplayCode() + " · Scheduled for " + dateStr + " (Seating opens on reservation date)");
         } else if (status == ReservationStatus.SEATED) {
             actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (Seated at Table " + detail.getTableNumber() + ") · Ready to Mark Completed");
         } else {
             actionHintLabel.setText("Selected " + detail.getDisplayCode() + " (" + status + ") · Double-click or click View Details");
         }
-    }
-
-    private boolean isSlotStarted(String slotLabel) {
-        if (slotLabel == null) return false;
-        for (TimeSlot s : cachedSlots) {
-            if (slotLabel.contains(s.getStartTime().format(DateTimeFormatter.ofPattern("hh:mm a"))) ||
-                    slotLabel.equalsIgnoreCase(s.getLabel())) {
-                return !s.getStartTime().isAfter(util.DbClock.localTime());
-            }
-        }
-        return false;
     }
 
     private void onSeatSelectedReservation() {

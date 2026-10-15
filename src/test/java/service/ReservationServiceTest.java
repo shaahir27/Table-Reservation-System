@@ -141,4 +141,34 @@ class ReservationServiceTest {
                 () -> ValidationUtil.validateReservation(1, today, pastSlot, 2, table));
         assertTrue(ex.getFieldErrors().containsKey("slot"));
     }
+
+    @Test
+    @DisplayName("getNextBookedSlotForTable detects upcoming reservation in subsequent slot")
+    void testGetNextBookedSlotForTable_Detected() {
+        TimeSlot slot1 = new TimeSlot(1, "12:00 PM", LocalTime.of(12, 0), LocalTime.of(13, 30));
+        TimeSlot slot2 = new TimeSlot(2, "01:30 PM", LocalTime.of(13, 30), LocalTime.of(15, 0));
+        TimeSlot slot3 = new TimeSlot(3, "03:00 PM", LocalTime.of(15, 0), LocalTime.of(16, 30));
+
+        dao.TimeSlotDAO fakeSlotDao = new dao.TimeSlotDAO() {
+            @Override
+            public List<TimeSlot> getAllSlots() {
+                return List.of(slot1, slot2, slot3);
+            }
+        };
+
+        dao.ReservationDAO fakeResDao = new dao.ReservationDAO() {
+            @Override
+            public boolean isSlotTaken(int tableId, LocalDate date, int slotId) {
+                return tableId == 5 && slotId == 2;
+            }
+        };
+
+        ReservationService svc = new ReservationService(fakeResDao, null, null, fakeSlotDao);
+        java.util.Optional<TimeSlot> next = svc.getNextBookedSlotForTable(5, LocalDate.now(), 1);
+        assertTrue(next.isPresent());
+        assertEquals(2, next.get().getSlotId());
+
+        java.util.Optional<TimeSlot> empty = svc.getNextBookedSlotForTable(6, LocalDate.now(), 1);
+        assertTrue(empty.isEmpty());
+    }
 }

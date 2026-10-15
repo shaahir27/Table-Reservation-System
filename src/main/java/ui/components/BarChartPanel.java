@@ -20,6 +20,7 @@ import java.util.List;
  */
 public class BarChartPanel extends JPanel {
     private String chartTitle = "";
+    private String subtitle = "";
     private List<String> categories = new ArrayList<>();
     private List<Double> values = new ArrayList<>();
 
@@ -60,6 +61,11 @@ public class BarChartPanel extends JPanel {
         setOpaque(false);
         setPreferredSize(new Dimension(500, 260));
         setMinimumSize(new Dimension(300, 200));
+    }
+
+    public void setSubtitle(String subtitle) {
+        this.subtitle = subtitle != null ? subtitle : "";
+        repaint();
     }
 
     public void setData(String title, List<String> categories, List<? extends Number> values) {
@@ -105,12 +111,18 @@ public class BarChartPanel extends JPanel {
             return;
         }
 
-        // Draw Chart Title
+        // Draw Chart Title & Subtitle
         int topMargin = 40;
         if (!chartTitle.isEmpty()) {
             g2.setColor(Theme.TEXT_PRIMARY);
             g2.setFont(Theme.FONT_BODY_BOLD);
             g2.drawString(chartTitle, 24, 28);
+            if (!subtitle.isEmpty()) {
+                g2.setColor(Theme.TEXT_MUTED);
+                g2.setFont(Theme.FONT_SMALL);
+                g2.drawString(subtitle, 24, 44);
+                topMargin = 56;
+            }
         }
 
         int bottomMargin = 45;

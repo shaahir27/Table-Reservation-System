@@ -82,6 +82,11 @@ public class NewReservationPanel extends BasePanel {
     private final TableGridPanel tableGridPanel = new TableGridPanel();
     private final JLabel summaryStripLabel = new JLabel("Please select an available table above.");
     private JButton confirmBtn;
+    private JPanel summaryStrip;
+    private JPanel waitlistPromptCard;
+    private final JLabel waitlistPromptLabel = new JLabel();
+    private JButton addWaitlistBtn;
+    private final service.WaitlistService waitlistService = new service.WaitlistService();
 
     // State
     private List<TableAvailability> currentSearchResults = new ArrayList<>();
@@ -352,7 +357,7 @@ public class NewReservationPanel extends BasePanel {
         step3Card.add(Box.createVerticalStrut(Theme.SPACE_16));
 
         // Selection Summary Strip
-        JPanel summaryStrip = new JPanel(new BorderLayout());
+        summaryStrip = new JPanel(new BorderLayout());
         summaryStrip.setOpaque(false);
         summaryStrip.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_12, 0, Theme.SPACE_12, 0));
         summaryStrip.setAlignmentX(0.0f);
@@ -366,7 +371,25 @@ public class NewReservationPanel extends BasePanel {
         confirmBtn.addActionListener(e -> onConfirmReservation());
         summaryStrip.add(confirmBtn, BorderLayout.EAST);
 
+        // Waitlist Fallback Banner
+        waitlistPromptCard = new JPanel(new BorderLayout(Theme.SPACE_16, 0));
+        waitlistPromptCard.setBackground(Theme.GOLD_TINT);
+        waitlistPromptCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.ACCENT_GOLD, 1, true),
+                BorderFactory.createEmptyBorder(12, 16, 12, 16)
+        ));
+        waitlistPromptCard.setAlignmentX(0.0f);
+        waitlistPromptLabel.setFont(Theme.FONT_BODY);
+        waitlistPromptLabel.setForeground(Theme.TEXT_PRIMARY);
+        waitlistPromptCard.add(waitlistPromptLabel, BorderLayout.CENTER);
+
+        addWaitlistBtn = AppButton.primary("+ Add to Waitlist");
+        addWaitlistBtn.addActionListener(e -> onAddToWaitlistClicked());
+        waitlistPromptCard.add(addWaitlistBtn, BorderLayout.EAST);
+        waitlistPromptCard.setVisible(false);
+
         step3Card.add(summaryStrip);
+        step3Card.add(waitlistPromptCard);
 
         // Initially hide Step 3 until a search is performed
         step3Card.setVisible(false);
@@ -543,10 +566,19 @@ public class NewReservationPanel extends BasePanel {
                     if (availabilities.isEmpty()) {
                         int maxCap = (Integer) payload[1];
                         if (guests > maxCap) {
-                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table seats " + guests + " guests (max capacity is " + maxCap + "). Table combination will be available in an update.");
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table seats " + guests + " guests (max capacity is " + maxCap + ").");
                         } else {
-                            Toast.info(SwingUtilities.getWindowAncestor(this), "No single table can seat " + guests + " guests for this slot. Try another slot or party size.");
+                            Toast.info(SwingUtilities.getWindowAncestor(this), "No tables are available for " + guests + " guests for this slot.");
                         }
+                        Customer c = customerSelector.getSelectedCustomer();
+                        String custName = c != null ? c.getName() : "Guest";
+                        waitlistPromptLabel.setText("<html><b>All tables are fully booked for " + slot.getLabel() + " on " + date.format(DATE_FMT) + ".</b><br>" +
+                                "<span style='color:#6B7280;'>Would you like to add " + custName + " to the Waitlist? The slot recovery loop will auto-offer opening tables.</span></html>");
+                        waitlistPromptCard.setVisible(true);
+                        summaryStrip.setVisible(false);
+                    } else {
+                        waitlistPromptCard.setVisible(false);
+                        summaryStrip.setVisible(true);
                     }
 
                     applyLocationFilterToGrid();
@@ -679,6 +711,64 @@ public class NewReservationPanel extends BasePanel {
         dateSelector.setDate(util.DbClock.today());
         updateSlotButtonsState();
         clearStep3();
+    }
+
+    private void onAddToWaitlistClicked() {
+        Customer cust = customerSelector.getSelectedCustomer();
+        if (cust == null) {
+            Toast.error(this, "Please select or search for a customer in Step 1 first.");
+            return;
+        }
+        LocalDate date = dateSelector.getDate();
+        TimeSlot slot = getSelectedSlot();
+        int guests = (Integer) guestSpinner.getValue();
+        String prefLoc = "Any".equalsIgnoreCase(selectedLocationFilter) ? null : selectedLocationFilter;
+
+        model.WaitlistEntry entry = new model.WaitlistEntry();
+        entry.setCustomerId(cust.getCustomerId());
+        entry.setCustomerName(cust.getName());
+        entry.setCustomerPhone(cust.getPhone());
+        entry.setServiceDate(date);
+        entry.setSlotId(slot != null ? slot.getSlotId() : null);
+        entry.setSlotLabel(slot != null ? slot.getLabel() : null);
+        entry.setPartySize(guests);
+        entry.setPrefLocation(prefLoc);
+        entry.setStatus(model.WaitlistStatus.WAITING);
+        entry.setNote("Added from booking screen");
+
+        addWaitlistBtn.setEnabled(false);
+        addWaitlistBtn.setText("Adding...");
+        Ui.async(
+                () -> waitlistService.addToWaitlist(entry),
+                saved -> {
+                    addWaitlistBtn.setEnabled(true);
+                    addWaitlistBtn.setText("+ Add to Waitlist");
+                    Toast.success(SwingUtilities.getWindowAncestor(this),
+                            "✓ Added " + cust.getName() + " to Waitlist for " + (slot != null ? slot.getLabel() : "slot") + ". Slot recovery will offer opened tables.");
+                    if (screenNavigator != null) {
+                        screenNavigator.accept("SERVICE_BOARD");
+                    }
+                },
+                err -> {
+                    addWaitlistBtn.setEnabled(true);
+                    addWaitlistBtn.setText("+ Add to Waitlist");
+                    Toast.error(SwingUtilities.getWindowAncestor(this), "Waitlist error: " + err.getMessage());
+                }
+        );
+    }
+
+    public void prefillBooking(LocalDate date, TimeSlot slot, RestaurantTable table) {
+        if (date != null) {
+            dateSelector.setDate(date);
+        }
+        if (slot != null) {
+            selectSlot(slot);
+        }
+        if (table != null) {
+            guestSpinner.setValue(Math.min(table.getCapacity(), 20));
+            onFindTables();
+            SwingUtilities.invokeLater(() -> onTableSelectedFromGrid(table));
+        }
     }
 
     private JPanel createCardPanel() {

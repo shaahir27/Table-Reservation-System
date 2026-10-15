@@ -153,3 +153,4 @@ public class BookingConfirmedDialog extends JDialog {
         return p;
     }
 }
+

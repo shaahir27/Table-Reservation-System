@@ -348,6 +348,7 @@ public class MainFrame extends JFrame {
         // Core Operational Panels
         dashboardPanel = new DashboardPanel(this::showScreen);
         serviceBoardPanel = new ServiceBoardPanel(reservationService, recoveryService, waitlistService, tableService, customerService);
+        tablePanel = new TablePanel();
         newReservationPanel = new NewReservationPanel();
         reservationsPanel = new ReservationsPanel();
         customerPanel = new CustomerPanel();
@@ -356,19 +357,18 @@ public class MainFrame extends JFrame {
 
         contentContainer.addScreen(dashboardPanel, "DASHBOARD");
         contentContainer.addScreen(serviceBoardPanel, "SERVICE_BOARD");
+        contentContainer.addScreen(tablePanel, "TABLES");
         contentContainer.addScreen(newReservationPanel, "NEW_RESERVATION");
         contentContainer.addScreen(reservationsPanel, "RESERVATIONS");
         contentContainer.addScreen(customerPanel, "CUSTOMERS");
 
         // Role-Gated Panels (Manager only)
         if (user.getRole() == Role.MANAGER) {
-            tablePanel = new TablePanel();
             reportsPanel = new ReportsPanel();
             staffPanel = new StaffPanel(userService);
             auditPanel = new AuditPanel(auditService);
             settingsPanel = new SettingsPanel(settingsService);
 
-            contentContainer.addScreen(tablePanel, "TABLES");
             contentContainer.addScreen(reportsPanel, "REPORTS");
             contentContainer.addScreen(staffPanel, "STAFF");
             contentContainer.addScreen(auditPanel, "AUDIT");
@@ -478,5 +478,9 @@ public class MainFrame extends JFrame {
 
     public void showSplash() {
         rootHost.showScreen(ROOT_SPLASH);
+    }
+
+    public NewReservationPanel getNewReservationPanel() {
+        return newReservationPanel;
     }
 }

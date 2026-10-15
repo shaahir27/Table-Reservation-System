@@ -82,17 +82,23 @@ public class SettingDAO {
     }
 
     public void update(String key, String value) {
+        if (key == null || key.trim().isEmpty()) {
+            return;
+        }
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("Setting value cannot be null or empty for key: " + key);
+        }
         String sql = "UPDATE app_setting SET setting_value = ? WHERE setting_key = ?";
         try (Connection con = DatabaseConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, value);
-            ps.setString(2, key);
+            ps.setString(1, value.trim());
+            ps.setString(2, key.trim());
             int rows = ps.executeUpdate();
             if (rows == 0) {
-                String ins = "INSERT INTO app_setting (setting_key, setting_value, description) VALUES (?, ?, 'Metadata')";
+                String ins = "INSERT INTO app_setting (setting_key, setting_value, description) VALUES (?, ?, 'System Configuration')";
                 try (PreparedStatement ips = con.prepareStatement(ins)) {
-                    ips.setString(1, key);
-                    ips.setString(2, value);
+                    ips.setString(1, key.trim());
+                    ips.setString(2, value.trim());
                     ips.executeUpdate();
                 }
             }

@@ -42,7 +42,8 @@ public class WalkInDialog extends JDialog {
     private final JSpinner guestSpinner = new JSpinner(new SpinnerNumberModel(2, 1, 20, 1));
     private final JTextField notesField = new JTextField();
     private final JLabel slotLabel = new JLabel("Detecting active dining slot...");
-    private final JLabel recommendationLabel = new JLabel("Evaluating tables...");
+    private final javax.swing.JComboBox<RestaurantTable> tableCombo = new javax.swing.JComboBox<>();
+    private final JLabel conflictWarningLabel = new JLabel(" ");
     private final JButton seatBtn;
     private final JButton cancelBtn;
 
@@ -139,21 +140,35 @@ public class WalkInDialog extends JDialog {
         content.add(notesField);
         content.add(Box.createVerticalStrut(Theme.SPACE_16));
 
-        // Recommendation Pill
-        JPanel recPanel = new JPanel(new BorderLayout(8, 0));
-        recPanel.setBackground(Theme.APP_BG);
-        recPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Theme.CARD_BORDER, 1, true),
-                BorderFactory.createEmptyBorder(10, 12, 10, 12)
-        ));
-        recPanel.setAlignmentX(0.0f);
-        recPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+        // Table Selection
+        JLabel tableLabel = new JLabel("Available Table *");
+        tableLabel.setFont(Theme.FONT_SMALL_BOLD);
+        tableLabel.setForeground(Theme.TEXT_MUTED);
+        tableLabel.setAlignmentX(0.0f);
+        content.add(tableLabel);
+        content.add(Box.createVerticalStrut(6));
 
-        recommendationLabel.setFont(Theme.FONT_BODY);
-        recommendationLabel.setForeground(Theme.TEXT_PRIMARY);
-        recPanel.add(recommendationLabel, BorderLayout.CENTER);
-        content.add(recPanel);
-        content.add(Box.createVerticalGlue());
+        Form.input(tableCombo);
+        tableCombo.setAlignmentX(0.0f);
+        tableCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        tableCombo.setRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof RestaurantTable t) {
+                    setText("Table " + t.getTableNumber() + " (" + t.getCapacity() + " seats · " + t.getLocation() + ")");
+                }
+                return this;
+            }
+        });
+        tableCombo.addActionListener(e -> checkConflict((RestaurantTable) tableCombo.getSelectedItem()));
+        content.add(tableCombo);
+        content.add(Box.createVerticalStrut(6));
+
+        conflictWarningLabel.setFont(Theme.FONT_SMALL);
+        conflictWarningLabel.setAlignmentX(0.0f);
+        content.add(conflictWarningLabel);
+        content.add(Box.createVerticalStrut(Theme.SPACE_8));
 
         // Buttons
         JPanel buttonRow = new ChipRow(10, true);
@@ -184,7 +199,7 @@ public class WalkInDialog extends JDialog {
         Ui.async(
                 () -> customerService.getAllCustomers(),
                 customers -> customerPicker.setCustomerList(customers),
-                err -> recommendationLabel.setText("Error loading customers: " + err.getMessage())
+                err -> conflictWarningLabel.setText("Error loading customers: " + err.getMessage())
         );
 
         Ui.async(
@@ -215,14 +230,14 @@ public class WalkInDialog extends JDialog {
                 },
                 err -> {
                     slotLabel.setText("Could not load dining slots.");
-                    recommendationLabel.setText(err.getMessage());
+                    conflictWarningLabel.setText(err.getMessage());
                 }
         );
     }
 
     private void updateRecommendation() {
         if (activeSlot == null) {
-            recommendationLabel.setText("Dining service closed for today.");
+            conflictWarningLabel.setText("Dining service closed for today.");
             seatBtn.setEnabled(false);
             return;
         }
@@ -231,25 +246,55 @@ public class WalkInDialog extends JDialog {
         LocalDate today = DbClock.today();
 
         Ui.async(
-                () -> {
-                    List<TableAvailability> av = reservationService.findAvailableTables(today, activeSlot, guests);
-                    return av.stream().filter(TableAvailability::isRecommended).findFirst().orElse(null);
-                },
-                rec -> {
-                    if (rec != null && rec.getTable() != null) {
-                        RestaurantTable t = rec.getTable();
-                        recommendationLabel.setText("Best Fit: Table " + t.getTableNumber() + 
-                                " (" + t.getCapacity() + "-top, " + t.getLocation() + ")");
+                () -> reservationService.findAvailableTables(today, activeSlot, guests),
+                availabilities -> {
+                    tableCombo.removeAllItems();
+                    RestaurantTable bestFit = null;
+                    for (TableAvailability ta : availabilities) {
+                        if (ta.getTable() != null) {
+                            tableCombo.addItem(ta.getTable());
+                            if (ta.isRecommended() && bestFit == null) {
+                                bestFit = ta.getTable();
+                            }
+                        }
+                    }
+                    if (bestFit != null) {
+                        tableCombo.setSelectedItem(bestFit);
+                    }
+                    if (tableCombo.getItemCount() > 0) {
                         seatBtn.setEnabled(true);
+                        checkConflict((RestaurantTable) tableCombo.getSelectedItem());
                     } else {
-                        recommendationLabel.setText("No tables available for " + guests + " guests right now.");
+                        conflictWarningLabel.setText("<html><b style='color:#DC2626;'>No tables available</b> fit " + guests + " guests right now.</html>");
                         seatBtn.setEnabled(false);
                     }
                 },
                 err -> {
-                    recommendationLabel.setText("Recommendation error: " + err.getMessage());
+                    conflictWarningLabel.setText("Recommendation error: " + err.getMessage());
                     seatBtn.setEnabled(false);
                 }
+        );
+    }
+
+    private void checkConflict(RestaurantTable table) {
+        if (table == null || activeSlot == null) {
+            conflictWarningLabel.setText(" ");
+            return;
+        }
+        LocalDate today = DbClock.today();
+        Ui.async(
+                () -> reservationService.getNextBookedSlotForTable(table.getTableId(), today, activeSlot.getSlotId()),
+                optSlot -> {
+                    if (optSlot.isPresent()) {
+                        TimeSlot s = optSlot.get();
+                        conflictWarningLabel.setText("<html><b style='color:#D97706;'>⚠️ Note:</b> Table " + table.getTableNumber() +
+                                " is booked for the next seating (<b>" + s.getLabel() + "</b>). Ensure party finishes before then.</html>");
+                    } else {
+                        conflictWarningLabel.setText("<html><span style='color:#16A34A;'>✓ Table " + table.getTableNumber() +
+                                " is unreserved for subsequent seatings today.</span></html>");
+                    }
+                },
+                null
         );
     }
 
@@ -262,12 +307,14 @@ public class WalkInDialog extends JDialog {
 
         int guests = (Integer) guestSpinner.getValue();
         String notes = notesField.getText().trim();
+        RestaurantTable selectedTable = (RestaurantTable) tableCombo.getSelectedItem();
+        Integer tableId = selectedTable != null ? selectedTable.getTableId() : null;
 
         ((AppButton) seatBtn).setLoading(true);
         seatBtn.setText("Seating…");
 
         Ui.async(
-                () -> reservationService.walkIn(selectedCust.getCustomerId(), guests, notes),
+                () -> reservationService.walkIn(selectedCust.getCustomerId(), guests, notes, tableId),
                 res -> {
                     Toast.success(getParent(), "Walk-in seated successfully (RES" + res.getReservationId() + ")");
                     if (onSuccess != null) {

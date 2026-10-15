@@ -13,10 +13,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableModel;
-import java.awt.AlphaComposite;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -33,7 +31,6 @@ public class StyledTable extends JTable {
     private int hoverRow = -1;
     private boolean refitQueued;
     private String emptyMessage = "Nothing to show yet.";
-    private final Anim.Value reveal = new Anim.Value(1, this::repaint);
     private final Anim.Value hoverFade = new Anim.Value(0, this::repaint);
 
     public StyledTable(TableModel model) {

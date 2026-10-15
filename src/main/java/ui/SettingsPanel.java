@@ -122,10 +122,11 @@ public class SettingsPanel extends BasePanel {
         Map<String, List<AppSetting>> groups = new LinkedHashMap<>();
         groups.put(G_SESSION, new ArrayList<>());
         groups.put(G_FLOOR, new ArrayList<>());
-        groups.put("Other", new ArrayList<>());
         for (AppSetting s : settings) {
             Def d = DEFS.get(s.getKey());
-            groups.get(d != null ? d.group() : "Other").add(s);
+            if (d != null) {
+                groups.get(d.group()).add(s);
+            }
         }
         // keep a stable, meaningful order for known keys
         for (List<AppSetting> list : groups.values()) {

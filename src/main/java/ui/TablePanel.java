@@ -173,7 +173,10 @@ public class TablePanel extends BasePanel {
         tabbedPane.putClientProperty("JTabbedPane.tabAreaInsets", new java.awt.Insets(0, 0, 0, 0));
         tabbedPane.putClientProperty("JTabbedPane.tabsPopupPolicy", "never");
 
-        // Tab 1: Manage Tables
+        // Tab 1: Floor View (Primary service view)
+        tabbedPane.addTab("Floor View", createFloorViewTab());
+
+        // Tab 2: Manage Tables (Manager CRUD)
         JPanel manageTab = new JPanel(new BorderLayout(Theme.SPACE_24, 0));
         manageTab.setOpaque(false);
         manageTab.setBorder(BorderFactory.createEmptyBorder(Theme.SPACE_16, 0, 0, 0));
@@ -181,10 +184,7 @@ public class TablePanel extends BasePanel {
         manageTab.add(createFormCard(), BorderLayout.WEST);
         manageTab.add(createTableCard(), BorderLayout.CENTER);
 
-        tabbedPane.addTab("Manage Tables", manageTab);
-
-        // Tab 2: Floor View (Section 10.6 & Phase 5)
-        tabbedPane.addTab("Floor View", createFloorViewTab());
+        tabbedPane.addTab("Table Inventory", manageTab);
 
         contentPanel.add(tabbedPane, BorderLayout.CENTER);
     }
@@ -674,9 +674,13 @@ public class TablePanel extends BasePanel {
         floorRefreshBtn = createSecondaryButton("↻ Refresh");
         floorRefreshBtn.addActionListener(e -> loadFloorView());
 
-        rightControls.add(autoArrangeBtn);
-        rightControls.add(saveLayoutBtn);
-        rightControls.add(editLayoutBtn);
+        boolean canEditLayout = security.Session.getInstance().hasPermission(security.Permission.FLOOR_LAYOUT_EDIT);
+        editLayoutBtn.setVisible(canEditLayout);
+        if (canEditLayout) {
+            rightControls.add(autoArrangeBtn);
+            rightControls.add(saveLayoutBtn);
+            rightControls.add(editLayoutBtn);
+        }
         rightControls.add(planChip);
         rightControls.add(gridChip);
         rightControls.add(floorRefreshBtn);
@@ -1014,8 +1018,15 @@ public class TablePanel extends BasePanel {
         if (selectedFloorTable == null) return;
         MainFrame mf = (MainFrame) SwingUtilities.getAncestorOfClass(MainFrame.class, this);
         if (mf != null) {
+            if (mf.getNewReservationPanel() != null) {
+                mf.getNewReservationPanel().prefillBooking(
+                        floorDateSelector.getDate(),
+                        getSelectedFloorSlot(),
+                        selectedFloorTable
+                );
+            }
             mf.showScreen("NEW_RESERVATION");
-            Toast.info(mf, "Selected Table " + selectedFloorTable.getTableNumber() + " (" + selectedFloorTable.getLocation() + "). Complete booking form.");
+            Toast.info(mf, "Table " + selectedFloorTable.getTableNumber() + " (" + selectedFloorTable.getLocation() + ") selected. Complete guest details.");
         }
     }
 

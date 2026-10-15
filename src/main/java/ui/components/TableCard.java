@@ -30,7 +30,6 @@ public class TableCard extends JPanel {
 
     private final TableAvailability availability;
     private boolean isSelected = false;
-    private boolean isHover = false;
     private final ui.anim.Anim.Value hoverAmt = new ui.anim.Anim.Value(0, this::repaint);
     private Consumer<TableCard> onClick;
 
@@ -51,14 +50,12 @@ public class TableCard extends JPanel {
             addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseEntered(MouseEvent e) {
-                    isHover = true;
                     hoverAmt.animateTo(1, 140);
                     repaint();
                 }
 
                 @Override
                 public void mouseExited(MouseEvent e) {
-                    isHover = false;
                     hoverAmt.animateTo(0, 200);
                     repaint();
                 }

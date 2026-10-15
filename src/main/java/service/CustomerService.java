@@ -58,12 +58,6 @@ public class CustomerService {
         }
 
         customerDAO.update(customer);
-        if (customer.getTags() != null) {
-            setCustomerTags(customer.getCustomerId(), customer.getTags());
-        }
-        if (customer.getNotes() != null) {
-            setCustomerNotes(customer.getCustomerId(), customer.getNotes());
-        }
         auditDAO.log("CUSTOMER_UPDATED", "CUSTOMER", (long) customer.getCustomerId(),
                 "Updated customer: " + customer.getName() + " (" + customer.getPhone() + ")");
     }
@@ -75,12 +69,7 @@ public class CustomerService {
     }
 
     public Customer getCustomerById(int customerId) {
-        Customer c = customerDAO.getCustomerById(customerId);
-        if (c != null) {
-            c.setTags(getCustomerTags(customerId));
-            c.setNotes(getCustomerNotes(customerId));
-        }
-        return c;
+        return customerDAO.getCustomerById(customerId);
     }
 
     public List<Customer> getAllCustomers() {
@@ -91,21 +80,29 @@ public class CustomerService {
         return customerDAO.searchCustomers(query);
     }
 
-    private final dao.SettingDAO settingDAO = new dao.SettingDAO();
-
     public String getCustomerTags(int customerId) {
-        return settingDAO.get("cust_tags_" + customerId, "");
+        Customer c = customerDAO.getCustomerById(customerId);
+        return c != null ? c.getTags() : "";
     }
 
     public void setCustomerTags(int customerId, String tags) {
-        settingDAO.update("cust_tags_" + customerId, tags != null ? tags : "");
+        Customer c = customerDAO.getCustomerById(customerId);
+        if (c != null) {
+            c.setTags(tags);
+            customerDAO.update(c);
+        }
     }
 
     public String getCustomerNotes(int customerId) {
-        return settingDAO.get("cust_notes_" + customerId, "");
+        Customer c = customerDAO.getCustomerById(customerId);
+        return c != null ? c.getNotes() : "";
     }
 
     public void setCustomerNotes(int customerId, String notes) {
-        settingDAO.update("cust_notes_" + customerId, notes != null ? notes : "");
+        Customer c = customerDAO.getCustomerById(customerId);
+        if (c != null) {
+            c.setNotes(notes);
+            customerDAO.update(c);
+        }
     }
 }

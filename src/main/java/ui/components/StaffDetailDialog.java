@@ -1,7 +1,6 @@
 package ui.components;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import exception.ValidationException;
 import model.AppUser;
 import model.AuditEntry;
 import security.PasswordPolicy;
@@ -36,10 +35,10 @@ import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.security.SecureRandom;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 /**
  * Staff 360° Floating Profile & Credential Management Modal.
@@ -84,8 +83,11 @@ public class StaffDetailDialog extends JDialog {
         this.userService = userService;
         this.onUpdated = onUpdated;
 
-        setSize(720, 620);
-        setMinimumSize(new Dimension(640, 500));
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int targetWidth = Math.min(740, (int) (screen.width * 0.85));
+        int targetHeight = Math.min(620, (int) (screen.height * 0.85));
+        setSize(Math.max(600, targetWidth), Math.max(480, targetHeight));
+        setMinimumSize(new Dimension(560, 440));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         JPanel root = new JPanel(new BorderLayout(0, Theme.SPACE_16));
@@ -221,6 +223,8 @@ public class StaffDetailDialog extends JDialog {
 
         // Full Name
         fullNameField.setText(user.getFullName());
+        fullNameField.setAlignmentX(0.0f);
+        fullNameField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         Form.input(fullNameField);
         panel.add(createFieldLabel("Full Name *"));
         panel.add(Box.createVerticalStrut(4));
@@ -231,6 +235,8 @@ public class StaffDetailDialog extends JDialog {
 
         // Username (Read-only)
         usernameField.setText(user.getUsername());
+        usernameField.setAlignmentX(0.0f);
+        usernameField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         usernameField.setEditable(false);
         usernameField.setEnabled(false);
         Form.input(usernameField);

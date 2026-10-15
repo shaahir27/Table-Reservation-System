@@ -18,12 +18,47 @@ import java.util.Optional;
  */
 public class CustomerDAO implements CrudDAO<Customer, Integer> {
 
+    private static volatile boolean schemaInitialized = false;
+
+    private static synchronized void ensureSchema() {
+        if (schemaInitialized) return;
+        try (Connection con = DatabaseConnection.getConnection();
+             java.sql.Statement st = con.createStatement()) {
+            try (ResultSet rs = st.executeQuery("SELECT tags, notes FROM customer WHERE ROWNUM = 1")) {
+                // columns already exist
+            } catch (SQLException e) {
+                try {
+                    st.execute("ALTER TABLE customer ADD (tags VARCHAR2(255), notes VARCHAR2(500))");
+                } catch (SQLException ignored) {
+                }
+            }
+            try {
+                st.execute("MERGE INTO customer c USING (" +
+                        "  SELECT TO_NUMBER(SUBSTR(setting_key, 11)) AS cid, setting_value AS tags " +
+                        "  FROM app_setting WHERE setting_key LIKE 'cust_tags_%'" +
+                        ") s ON (c.customer_id = s.cid) " +
+                        "WHEN MATCHED THEN UPDATE SET c.tags = s.tags");
+                st.execute("MERGE INTO customer c USING (" +
+                        "  SELECT TO_NUMBER(SUBSTR(setting_key, 12)) AS cid, setting_value AS notes " +
+                        "  FROM app_setting WHERE setting_key LIKE 'cust_notes_%'" +
+                        ") s ON (c.customer_id = s.cid) " +
+                        "WHEN MATCHED THEN UPDATE SET c.notes = s.notes");
+                st.execute("DELETE FROM app_setting WHERE setting_key LIKE 'cust_%'");
+            } catch (Exception ignored) {
+            }
+            schemaInitialized = true;
+        } catch (Exception e) {
+            schemaInitialized = true;
+        }
+    }
+
     @Override
     public void add(Customer customer) {
         addCustomer(customer);
     }
 
     public void addCustomer(Customer customer) {
+        ensureSchema();
         try (Connection con = DatabaseConnection.getConnection()) {
             addCustomer(con, customer);
         } catch (SQLException e) {
@@ -32,12 +67,15 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public void addCustomer(Connection con, Customer customer) throws SQLException {
-        String sql = "INSERT INTO customer (customer_id, customer_name, phone, email) " +
-                     "VALUES (customer_seq.NEXTVAL, ?, ?, ?)";
+        ensureSchema();
+        String sql = "INSERT INTO customer (customer_id, customer_name, phone, email, tags, notes) " +
+                     "VALUES (customer_seq.NEXTVAL, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, new String[]{"CUSTOMER_ID"})) {
             ps.setString(1, customer.getName());
             ps.setString(2, customer.getPhone());
             ps.setString(3, customer.getEmail());
+            ps.setString(4, customer.getTags() != null ? customer.getTags() : "");
+            ps.setString(5, customer.getNotes() != null ? customer.getNotes() : "");
             ps.executeUpdate();
 
             try (ResultSet rs = ps.getGeneratedKeys()) {
@@ -62,7 +100,8 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public Customer getCustomerById(Connection con, int customerId) throws SQLException {
-        String sql = "SELECT customer_id, customer_name, phone, email FROM customer WHERE customer_id = ?";
+        ensureSchema();
+        String sql = "SELECT customer_id, customer_name, phone, email, tags, notes FROM customer WHERE customer_id = ?";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, customerId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -80,6 +119,7 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public List<Customer> getAllCustomers() {
+        ensureSchema();
         try (Connection con = DatabaseConnection.getConnection()) {
             return getAllCustomers(con);
         } catch (SQLException e) {
@@ -88,7 +128,8 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public List<Customer> getAllCustomers(Connection con) throws SQLException {
-        String sql = "SELECT customer_id, customer_name, phone, email FROM customer ORDER BY customer_name ASC";
+        ensureSchema();
+        String sql = "SELECT customer_id, customer_name, phone, email, tags, notes FROM customer ORDER BY customer_name ASC";
         List<Customer> list = new ArrayList<>();
         try (PreparedStatement ps = con.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -100,6 +141,7 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public List<Customer> searchCustomers(String query) {
+        ensureSchema();
         try (Connection con = DatabaseConnection.getConnection()) {
             return searchCustomers(con, query);
         } catch (SQLException e) {
@@ -108,11 +150,12 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public List<Customer> searchCustomers(Connection con, String query) throws SQLException {
+        ensureSchema();
         if (query == null || query.trim().isEmpty()) {
             return getAllCustomers(con);
         }
 
-        String sql = "SELECT customer_id, customer_name, phone, email FROM customer " +
+        String sql = "SELECT customer_id, customer_name, phone, email, tags, notes FROM customer " +
                      "WHERE UPPER(customer_name) LIKE UPPER(?) OR phone LIKE ? " +
                      "ORDER BY customer_name ASC";
         List<Customer> list = new ArrayList<>();
@@ -136,6 +179,7 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public void updateCustomer(Customer customer) {
+        ensureSchema();
         try (Connection con = DatabaseConnection.getConnection()) {
             updateCustomer(con, customer);
         } catch (SQLException e) {
@@ -144,12 +188,15 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     public void updateCustomer(Connection con, Customer customer) throws SQLException {
-        String sql = "UPDATE customer SET customer_name = ?, phone = ?, email = ? WHERE customer_id = ?";
+        ensureSchema();
+        String sql = "UPDATE customer SET customer_name = ?, phone = ?, email = ?, tags = ?, notes = ? WHERE customer_id = ?";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, customer.getName());
             ps.setString(2, customer.getPhone());
             ps.setString(3, customer.getEmail());
-            ps.setInt(4, customer.getCustomerId());
+            ps.setString(4, customer.getTags() != null ? customer.getTags() : "");
+            ps.setString(5, customer.getNotes() != null ? customer.getNotes() : "");
+            ps.setInt(6, customer.getCustomerId());
             ps.executeUpdate();
         }
     }
@@ -191,11 +238,23 @@ public class CustomerDAO implements CrudDAO<Customer, Integer> {
     }
 
     private Customer mapRow(ResultSet rs) throws SQLException {
+        String tags = "";
+        String notes = "";
+        try {
+            tags = rs.getString("tags");
+        } catch (SQLException ignored) {
+        }
+        try {
+            notes = rs.getString("notes");
+        } catch (SQLException ignored) {
+        }
         return new Customer(
                 rs.getInt("customer_id"),
                 rs.getString("customer_name"),
                 rs.getString("phone"),
-                rs.getString("email")
+                rs.getString("email"),
+                tags != null ? tags : "",
+                notes != null ? notes : ""
         );
     }
 }
